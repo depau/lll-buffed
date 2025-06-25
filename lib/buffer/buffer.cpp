@@ -24,7 +24,12 @@
   ***************************************************************************************
 **/
 
+#include <array>
+#include <cstdio>
+
 #include "buffer.h"
+
+namespace {
 TMC2209Stepper driver(UART, UART, R_SENSE, DRIVER_ADDRESS);
 Buffer buffer{}; // stores sensor states
 Motor_State motor_state = Stop;
@@ -32,24 +37,24 @@ Motor_State motor_state = Stop;
 bool is_front = false; // forward flag
 uint32_t front_time = 0; // forward time
 constexpr int EEPROM_ADDR_TIMEOUT = 0;
-constexpr uint32_t DEFAULT_TIMEOUT = 30000;
-constexpr uint32_t EEPROM_EMPTY = 0xFFFFFFFFu;
-constexpr uint32_t TIMER_PRESCALE = 48u;
-constexpr uint32_t TIMER_OVERFLOW = 1000u;
-constexpr uint32_t ONE_SECOND_MS = 1000u;
+constexpr uint32_t DEFAULT_TIMEOUT = 30000U;
+constexpr uint32_t EEPROM_EMPTY = 0xFFFFFFFFU;
+constexpr uint32_t TIMER_PRESCALE = 48U;
+constexpr uint32_t TIMER_OVERFLOW = 1000U;
+constexpr uint32_t ONE_SECOND_MS = 1000U;
 constexpr int MAX_INDEX = 0x1ff;
-constexpr uint32_t TOGGLE_INTERVAL_MS = 500u;
-constexpr unsigned long SERIAL_BAUDRATE = 9600;
-constexpr uint8_t DRIVER_TOFF = 5u;
-constexpr uint32_t MAX_TIMEOUT = 0xffffffffu;
+constexpr uint32_t TOGGLE_INTERVAL_MS = 500U;
+constexpr uint32_t SERIAL_BAUDRATE = 9600U;
+constexpr uint8_t DRIVER_TOFF = 5U;
+constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
 
 uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
 bool is_error = false; // error flag, set if pushing filament for 30s without stopping
-String serial_buf;
-
-static HardwareTimer timer(TIM6); // timer for timeout handling
+} // namespace
 
 void buffer_init() {
+  static HardwareTimer timer(TIM6); // timer for timeout handling
+
   buffer_sensor_init();
   buffer_motor_init();
   delay(ONE_SECOND_MS);
@@ -74,8 +79,9 @@ void buffer_init() {
 
 void buffer_loop() {
 
+  static String serial_buf;
   uint32_t lastToggleTime = millis(); // remember the last toggle time
-  while (1) {
+  while (true) {
 
     if (millis() - lastToggleTime >= TOGGLE_INTERVAL_MS) // toggle every 500ms
     {
@@ -88,8 +94,8 @@ void buffer_loop() {
 #if DEBUG
     buffer_debug();
     while (Serial.available() > 0) {
-      const char c = Serial.read();
-      serial_buf += c;
+      const char incoming_char = Serial.read();
+      serial_buf += incoming_char;
       int pos_enter = -1;
       pos_enter = serial_buf.indexOf("\n");
       if (pos_enter != -1) {
@@ -122,8 +128,8 @@ void buffer_loop() {
     motor_control();
 
     while (Serial.available() > 0) {
-      const char c = Serial.read();
-      serial_buf += c;
+      const char incoming_char = Serial.read();
+      serial_buf += incoming_char;
     }
     if (serial_buf.length() > 0) {
 
@@ -195,12 +201,12 @@ void buffer_motor_init() {
  * @retval NULL
  **/
 void read_sensor_state() {
-  buffer.buffer1_pos1_sensor_state = digitalRead(HALL3);
-  buffer.buffer1_pos2_sensor_state = digitalRead(HALL2);
-  buffer.buffer1_pos3_sensor_state = digitalRead(HALL1);
-  buffer.buffer1_material_swtich_state = digitalRead(ENDSTOP_3);
-  buffer.key1 = digitalRead(KEY1);
-  buffer.key2 = digitalRead(KEY2);
+  buffer.buffer1_pos1_sensor_state = digitalRead(HALL3) != 0;
+  buffer.buffer1_pos2_sensor_state = digitalRead(HALL2) != 0;
+  buffer.buffer1_pos3_sensor_state = digitalRead(HALL1) != 0;
+  buffer.buffer1_material_swtich_state = digitalRead(ENDSTOP_3) != 0;
+  buffer.key1 = digitalRead(KEY1) != 0;
+  buffer.key2 = digitalRead(KEY2) != 0;
 }
 
 /**
@@ -214,14 +220,15 @@ void motor_control() {
 
   // Button-controlled motor
   // KEY1 pressed
-  if (!digitalRead(KEY1)) {
+  if (digitalRead(KEY1) == LOW) {
     WRITE_EN_PIN(0); // enable
     driver.VACTUAL(STOP); // stop
 
     driver.shaft(BACK);
     driver.VACTUAL(VACTUAL_VALUE);
-    while (!digitalRead(KEY1))
-      ; // wait for release
+    while (digitalRead(KEY1) == LOW) {
+      // wait for release
+    }
 
     driver.VACTUAL(STOP); // stop
     motor_state = Stop;
@@ -231,15 +238,14 @@ void motor_control() {
     is_error = false;
     WRITE_EN_PIN(1); // disable
 
-  } else if (!digitalRead(KEY2)) // KEY2 pressed
-  {
+  } else if (digitalRead(KEY2) == LOW) { // KEY2 pressed
     WRITE_EN_PIN(0);
     driver.VACTUAL(STOP); // stop
 
     driver.shaft(FORWARD);
     driver.VACTUAL(VACTUAL_VALUE);
-    while (!digitalRead(KEY2))
-      ;
+    while (digitalRead(KEY2) == LOW) {
+    }
 
     driver.VACTUAL(STOP); // stop
     motor_state = Stop;
@@ -251,16 +257,16 @@ void motor_control() {
   }
 
   // Check filament presence
-  if (digitalRead(ENDSTOP_3)) {
+  if (digitalRead(ENDSTOP_3) != 0) {
     // No filament, stop motor
     driver.VACTUAL(STOP); // stop
     motor_state = Stop;
 
     // Pull filament-break pin low
-    digitalWrite(DUANLIAO, 0);
+    digitalWrite(DUANLIAO, LOW);
 
     // Turn off indicator LED
-    digitalWrite(START_LED, 0);
+    digitalWrite(START_LED, LOW);
 
     is_front = false;
     front_time = 0;
@@ -271,10 +277,10 @@ void motor_control() {
   }
 
   // Filament present, set filament-break pin high
-  digitalWrite(DUANLIAO, 1);
+  digitalWrite(DUANLIAO, HIGH);
 
   // Turn on indicator LED
-  digitalWrite(START_LED, 1);
+  digitalWrite(START_LED, HIGH);
 
   // Check for error condition
   if (is_error) {
@@ -373,11 +379,12 @@ void buffer_debug() {
     Serial.print("GCONF():0x");
     Serial.println(gconf, HEX);
     Serial.print("CHOPCONF():0x");
-    char buf[11]; // "0x" + 8 digits + null terminator
-    sprintf(buf, "%08lX", chopconf); // %08lX -> 8-digit uppercase hex (long unsigned)
+    String buf = String(chopconf, HEX);
+    buf.toUpperCase();
     Serial.println(buf);
     Serial.print("PWMCONF():0x");
-    sprintf(buf, "%08lX", pwmconf); // %08lX -> 8-digit uppercase hex (long unsigned)
+    buf = String(pwmconf, HEX);
+    buf.toUpperCase();
     Serial.println(buf);
     Serial.println("");
   }
