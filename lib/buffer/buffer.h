@@ -24,8 +24,8 @@
   ***************************************************************************************
 **/
 
-#ifndef __BUFFER_H__
-#define __BUFFER_H__
+#ifndef LIB_BUFFER_BUFFER_H
+#define LIB_BUFFER_BUFFER_H
 
 #include <Arduino.h>
 #include <EEPROM.h>
@@ -53,8 +53,9 @@
 #define R_SENSE 0.11f // Match to your driver
 
 #define SPEED 300 // speed (r/min)
-#define Move_Divide_NUM ((int32_t) (64)) // microsteps per step
-#define VACTRUAL_VALUE (uint32_t) (SPEED * Move_Divide_NUM * 200 / 60 / 0.715) // VACTUAL register value
+constexpr int32_t MOVE_DIVIDE_NUM = 64;
+constexpr uint32_t VACTUAL_VALUE = static_cast<uint32_t>(static_cast<float>(SPEED) * MOVE_DIVIDE_NUM * 200.0f / 60.0f /
+                                                         0.715f);
 
 #define STOP 0 // stop
 #define I_CURRENT (600) // motor current
@@ -86,13 +87,13 @@ typedef enum {
 extern void buffer_sensor_init();
 extern void buffer_motor_init();
 
-extern void read_sensor_state(void);
-extern void motor_control(void);
+extern void read_sensor_state();
+extern void motor_control();
 
 extern void buffer_init();
-extern void buffer_loop(void);
+extern void buffer_loop();
 extern void timer_it_callback();
-extern void buffer_debug(void);
+extern void buffer_debug();
 
 extern bool is_error;
 extern uint32_t front_time; // forward time
@@ -100,4 +101,4 @@ extern uint32_t timeout;
 extern bool is_front;
 extern TMC2209Stepper driver;
 
-#endif
+#endif // LIB_BUFFER_BUFFER_H
