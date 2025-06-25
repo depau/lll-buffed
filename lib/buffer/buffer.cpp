@@ -26,14 +26,24 @@
 
 #include "buffer.h"
 TMC2209Stepper driver(UART, UART, R_SENSE, DRIVER_ADDRESS);
-Buffer buffer = { 0 }; // stores sensor states
+Buffer buffer{}; // stores sensor states
 Motor_State motor_state = Stop;
 
 bool is_front = false; // forward flag
 uint32_t front_time = 0; // forward time
-const int EEPROM_ADDR_TIMEOUT = 0;
-const uint32_t DEFAULT_TIMEOUT = 30000;
-uint32_t timeout = 30000; // timeout in ms
+constexpr int EEPROM_ADDR_TIMEOUT = 0;
+constexpr uint32_t DEFAULT_TIMEOUT = 30000;
+constexpr uint32_t EEPROM_EMPTY = 0xFFFFFFFFu;
+constexpr uint32_t TIMER_PRESCALE = 48u;
+constexpr uint32_t TIMER_OVERFLOW = 1000u;
+constexpr uint32_t ONE_SECOND_MS = 1000u;
+constexpr int MAX_INDEX = 0x1ff;
+constexpr uint32_t TOGGLE_INTERVAL_MS = 500u;
+constexpr unsigned long SERIAL_BAUDRATE = 9600;
+constexpr uint8_t DRIVER_TOFF = 5u;
+constexpr uint32_t MAX_TIMEOUT = 0xffffffffu;
+
+uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
 bool is_error = false; // error flag, set if pushing filament for 30s without stopping
 String serial_buf;
 
@@ -42,11 +52,11 @@ static HardwareTimer timer(TIM6); // timer for timeout handling
 void buffer_init() {
   buffer_sensor_init();
   buffer_motor_init();
-  delay(1000);
+  delay(ONE_SECOND_MS);
 
   EEPROM.get(EEPROM_ADDR_TIMEOUT, timeout);
-  // Check whether the read value is valid (e.g. before first write it may be 0xFFFFFFFF or 0)
-  if (timeout == 0xFFFFFFFF || timeout == 0) {
+  // Check whether the read value is valid (e.g. before first write it may be EEPROM_EMPTY or 0)
+  if (timeout == EEPROM_EMPTY || timeout == 0) {
     timeout = DEFAULT_TIMEOUT;
     EEPROM.put(EEPROM_ADDR_TIMEOUT, timeout);
     Serial.println("EEPROM is empty");
@@ -56,8 +66,8 @@ void buffer_init() {
   }
 
   timer.pause();
-  timer.setPrescaleFactor(48); // divide by 48 -> 48 MHz / 48 = 1 MHz
-  timer.setOverflow(1000); // 1ms
+  timer.setPrescaleFactor(TIMER_PRESCALE); // divide by 48 -> 48 MHz / 48 = 1 MHz
+  timer.setOverflow(TIMER_OVERFLOW); // 1ms
   timer.attachInterrupt(&timer_it_callback);
   timer.resume();
 }
@@ -67,7 +77,7 @@ void buffer_loop() {
   uint32_t lastToggleTime = millis(); // remember the last toggle time
   while (1) {
 
-    if (millis() - lastToggleTime >= 500) // toggle every 500ms
+    if (millis() - lastToggleTime >= TOGGLE_INTERVAL_MS) // toggle every 500ms
     {
       lastToggleTime = millis(); // update current time
       digitalToggle(ERR_LED);
@@ -78,7 +88,7 @@ void buffer_loop() {
 #if DEBUG
     buffer_debug();
     while (Serial.available() > 0) {
-      char c = Serial.read();
+      const char c = Serial.read();
       serial_buf += c;
       int pos_enter = -1;
       pos_enter = serial_buf.indexOf("\n");
@@ -112,7 +122,7 @@ void buffer_loop() {
     motor_control();
 
     while (Serial.available() > 0) {
-      char c = Serial.read();
+      const char c = Serial.read();
       serial_buf += c;
     }
     if (serial_buf.length() > 0) {
@@ -123,8 +133,8 @@ void buffer_loop() {
         serial_buf = "";
       } else if (serial_buf.startsWith("set")) {
         serial_buf.remove(0, 3);
-        int64_t num = serial_buf.toInt();
-        if (num < 0 || num > 0xffffffff) {
+        const int64_t num = serial_buf.toInt();
+        if (num < 0 || num > MAX_TIMEOUT) { // keep numeric limit check
           serial_buf = "";
           Serial.println("Error: Invalid timeout value.");
           continue;
@@ -169,11 +179,11 @@ void buffer_motor_init() {
 
   // Initialize motor driver
   driver.begin(); // UART: Init SW UART (if selected) with default 115200 baudrate
-  driver.beginSerial(9600);
+  driver.beginSerial(SERIAL_BAUDRATE);
   driver.I_scale_analog(false);
-  driver.toff(5); // Enables driver in software
+  driver.toff(DRIVER_TOFF); // Enables driver in software
   driver.rms_current(I_CURRENT); // Set motor RMS current
-  driver.microsteps(Move_Divide_NUM); // Set microsteps to 1/16th
+  driver.microsteps(MOVE_DIVIDE_NUM); // Set microsteps to 1/16th
   driver.VACTUAL(STOP); // Set velocity
   driver.en_spreadCycle(true);
   driver.pwm_autoscale(true);
@@ -184,7 +194,7 @@ void buffer_motor_init() {
  * @param  NULL
  * @retval NULL
  **/
-void read_sensor_state(void) {
+void read_sensor_state() {
   buffer.buffer1_pos1_sensor_state = digitalRead(HALL3);
   buffer.buffer1_pos2_sensor_state = digitalRead(HALL2);
   buffer.buffer1_pos3_sensor_state = digitalRead(HALL1);
@@ -198,7 +208,7 @@ void read_sensor_state(void) {
  * @param  NULL
  * @retval NULL
  **/
-void motor_control(void) {
+void motor_control() {
 
   static Motor_State last_motor_state = Stop;
 
@@ -209,7 +219,7 @@ void motor_control(void) {
     driver.VACTUAL(STOP); // stop
 
     driver.shaft(BACK);
-    driver.VACTUAL(VACTRUAL_VALUE);
+    driver.VACTUAL(VACTUAL_VALUE);
     while (!digitalRead(KEY1))
       ; // wait for release
 
@@ -227,7 +237,7 @@ void motor_control(void) {
     driver.VACTUAL(STOP); // stop
 
     driver.shaft(FORWARD);
-    driver.VACTUAL(VACTRUAL_VALUE);
+    driver.VACTUAL(VACTUAL_VALUE);
     while (!digitalRead(KEY2))
       ;
 
@@ -296,18 +306,20 @@ void motor_control(void) {
     front_time = 0;
   }
 
-  if (motor_state == last_motor_state) // same as last state, no need to send command
+  if (motor_state == last_motor_state) { // same as last state, no need to send command
     return;
+  }
 
   // Motor control
   switch (motor_state) {
   case Forward: // forward
   {
     WRITE_EN_PIN(0);
-    if (last_motor_state == Back)
+    if (last_motor_state == Back) {
       driver.VACTUAL(STOP); // was moving back, stop before forwarding
+    }
     driver.shaft(FORWARD);
-    driver.VACTUAL(VACTRUAL_VALUE);
+    driver.VACTUAL(VACTUAL_VALUE);
 
   } break;
   case Stop: // stop
@@ -319,11 +331,11 @@ void motor_control(void) {
   case Back: // backward
   {
     WRITE_EN_PIN(0);
-    if (last_motor_state == Forward)
-      driver.VACTUAL(STOP);
-    ; // was moving forward, stop before reversing
+    if (last_motor_state == Forward) {
+      driver.VACTUAL(STOP); // was moving forward, stop before reversing
+    }
     driver.shaft(BACK);
-    driver.VACTUAL(VACTRUAL_VALUE);
+    driver.VACTUAL(VACTUAL_VALUE);
   } break;
   }
 }
@@ -337,24 +349,24 @@ void timer_it_callback() {
   }
 }
 
-void buffer_debug(void) {
+void buffer_debug() {
   // Serial.print("buffer1_pos1_sensor_state:");Serial.println(buffer.buffer1_pos1_sensor_state);
   // Serial.print("buffer1_pos2_sensor_state:");Serial.println(buffer.buffer1_pos2_sensor_state);
   // Serial.print("buffer1_pos3_sensor_state:");Serial.println(buffer.buffer1_pos3_sensor_state);
   // Serial.print("buffer1_material_swtich_state:");Serial.println(buffer.buffer1_material_swtich_state);
   // Serial.print("key1:");Serial.println(buffer.key1);
   // Serial.print("key2:");Serial.println(buffer.key2);
-  static int i = 0;
-  if (i < 0x1ff) {
+  static int idx = 0;
+  if (idx < MAX_INDEX) {
     Serial.print("i:");
-    Serial.println(i);
-    driver.GCONF(i);
-    driver.PWMCONF(i);
-    i++;
+    Serial.println(idx);
+    driver.GCONF(idx);
+    driver.PWMCONF(idx);
+    idx++;
   }
-  uint32_t gconf = driver.GCONF();
-  uint32_t chopconf = driver.CHOPCONF();
-  uint32_t pwmconf = driver.PWMCONF();
+  const uint32_t gconf = driver.GCONF();
+  const uint32_t chopconf = driver.CHOPCONF();
+  const uint32_t pwmconf = driver.PWMCONF();
   if (driver.CRCerror) {
     Serial.println("CRCerror");
   } else {
@@ -369,5 +381,5 @@ void buffer_debug(void) {
     Serial.println(buf);
     Serial.println("");
   }
-  delay(1000);
+  delay(ONE_SECOND_MS);
 }
