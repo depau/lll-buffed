@@ -53,6 +53,7 @@ bool is_error = false; // error flag, set if pushing filament for 30s without st
 } // namespace
 
 void buffer_init() {
+  // NOLINTNEXTLINE(cppcoreguidelines-pro-type-cstyle-cast, performance-no-int-to-ptr)
   static HardwareTimer timer(TIM6); // timer for timeout handling
 
   buffer_sensor_init();
