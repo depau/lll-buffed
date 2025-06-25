@@ -48,8 +48,17 @@ constexpr uint32_t SERIAL_BAUDRATE = 9600U;
 constexpr uint8_t DRIVER_TOFF = 5U;
 constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
 
+// number of presses required to enable continuous movement
+constexpr uint8_t MULTI_PRESS_COUNT = 3U;
+// minimum time between presses to be considered part of the same sequence (ms)
+constexpr uint32_t MULTI_PRESS_MIN_INTERVAL_MS = 50U;
+// maximum time between presses to be considered part of the same sequence (ms)
+constexpr uint32_t MULTI_PRESS_MAX_INTERVAL_MS = 500U;
+
 uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
 bool is_error = false; // error flag, set if pushing filament for 30s without stopping
+bool continuous_run = false; // flag for continuous movement
+Motor_State continuous_direction = Stop; // direction for continuous movement
 } // namespace
 
 void buffer_init() {
@@ -210,51 +219,94 @@ void read_sensor_state() {
   buffer.key2 = digitalRead(KEY2) != 0;
 }
 
+namespace {
+void startMotor(Motor_State dir, Motor_State last_state) {
+  WRITE_EN_PIN(0);
+  if (dir != last_state) {
+    driver.VACTUAL(STOP);
+  }
+  driver.shaft(dir == Forward ? FORWARD : BACK);
+  driver.VACTUAL(VACTUAL_VALUE);
+}
+
+void stopMotor() {
+  WRITE_EN_PIN(1);
+  driver.VACTUAL(STOP);
+}
+
+auto handleContinuousRun(Motor_State &last_motor_state) -> bool {
+  if (!continuous_run) {
+    return false;
+  }
+  if (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW || is_error) {
+    stopMotor();
+    motor_state = Stop;
+    continuous_run = false;
+    is_front = false;
+    front_time = 0;
+    is_error = false;
+    while (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW) {
+    }
+    return true;
+  }
+  startMotor(continuous_direction, last_motor_state);
+  is_front = continuous_direction == Forward;
+  last_motor_state = continuous_direction;
+  return true;
+}
+
+auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &count, Motor_State &last_motor_state)
+  -> bool {
+  if (digitalRead(pin) != LOW) {
+    return false;
+  }
+  const uint32_t now = millis();
+  if (now - last_time >= MULTI_PRESS_MIN_INTERVAL_MS && now - last_time <= MULTI_PRESS_MAX_INTERVAL_MS) {
+    count++;
+  } else {
+    count = 1;
+  }
+  last_time = now;
+
+  startMotor(dir, last_motor_state);
+  while (digitalRead(pin) == LOW) {
+  }
+  stopMotor();
+  motor_state = Stop;
+  is_front = false;
+  front_time = 0;
+  is_error = false;
+
+  if (count >= MULTI_PRESS_COUNT) {
+    continuous_run = true;
+    continuous_direction = dir;
+    count = 0;
+  }
+  return true;
+}
+} // namespace
+
 /**
  * @brief  电机控制
  * @param  NULL
  * @retval NULL
  **/
 void motor_control() {
-
   static Motor_State last_motor_state = Stop;
+  static uint32_t last_key1_time = 0;
+  static uint8_t key1_count = 0;
+  static uint32_t last_key2_time = 0;
+  static uint8_t key2_count = 0;
 
-  // Button-controlled motor
-  // KEY1 pressed
-  if (digitalRead(KEY1) == LOW) {
-    WRITE_EN_PIN(0); // enable
-    driver.VACTUAL(STOP); // stop
+  if (handleContinuousRun(last_motor_state)) {
+    return;
+  }
 
-    driver.shaft(BACK);
-    driver.VACTUAL(VACTUAL_VALUE);
-    while (digitalRead(KEY1) == LOW) {
-      // wait for release
-    }
-
-    driver.VACTUAL(STOP); // stop
-    motor_state = Stop;
-
-    is_front = false;
-    front_time = 0;
-    is_error = false;
-    WRITE_EN_PIN(1); // disable
-
-  } else if (digitalRead(KEY2) == LOW) { // KEY2 pressed
-    WRITE_EN_PIN(0);
-    driver.VACTUAL(STOP); // stop
-
-    driver.shaft(FORWARD);
-    driver.VACTUAL(VACTUAL_VALUE);
-    while (digitalRead(KEY2) == LOW) {
-    }
-
-    driver.VACTUAL(STOP); // stop
-    motor_state = Stop;
-
-    is_front = false;
-    front_time = 0;
-    is_error = false;
-    WRITE_EN_PIN(1);
+  if (handleButton(KEY1, Back, last_key1_time, key1_count, last_motor_state)) {
+    return;
+  }
+  if (handleButton(KEY2, Forward, last_key2_time, key2_count, last_motor_state)) {
+    return;
   }
 
   // Check filament presence
