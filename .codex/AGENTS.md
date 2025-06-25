@@ -17,14 +17,24 @@ The firmware is written in C++ and uses PlatformIO for development.
 
 ### Development instructions
 
-When making changes to the firmware you must ensure that the code is formatted correctly by running `clang-format` on the source files. You can do this by running the following command in the root directory of the project:
+When making changes to the firmware you must ensure that the code is formatted correctly by running `clang-format` on
+the source files. You can do this by running the following command in the root directory of the project:
 
 ```bash
 clang-format -i lib/*.cpp lib/*.h src/*.cpp src/*.h
 ```
 
-You must also ensure the code builds correctly with PlatformIO. You can do this by running the following command in the root directory of the project:
+You must also ensure the code builds correctly with PlatformIO. You can do this by running the following command in the
+root directory of the project:
 
 ```bash
 pio run -e fly_buffer_f072c8
 ```
+
+Finally, you should run `clang-tidy` to check for any code quality issues and fix any warnings unless it really doesn't
+make sense. You can do this by running the following command in the root directory of the project:
+
+```bash
+pio check
+```
+If you decide to ignore a warning, please add a comment in your response explaining why you chose to ignore it.
