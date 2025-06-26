@@ -54,7 +54,7 @@ constexpr uint32_t MULTI_PRESS_MIN_INTERVAL_MS = 50U;
 constexpr uint32_t MULTI_PRESS_MAX_INTERVAL_MS = 500U;
 
 uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
-bool is_error = false; // error flag, set if pushing filament for 30s without stopping
+bool is_timeout = false; // error flag, set if pushing filament for 30s without stopping
 bool continuous_run = false; // flag for continuous movement
 Motor_State continuous_direction = Stop; // direction for continuous movement
 } // namespace
@@ -224,13 +224,13 @@ auto handleContinuousRun(Motor_State &last_motor_state) -> bool {
   if (!continuous_run) {
     return false;
   }
-  if (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW || is_error) {
+  if (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW || is_timeout) {
     stopMotor();
     motor_state = Stop;
     continuous_run = false;
     is_front = false;
     front_time = 0;
-    is_error = false;
+    is_timeout = false;
     while (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW) {
     }
     return true;
@@ -261,7 +261,7 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
   motor_state = Stop;
   is_front = false;
   front_time = 0;
-  is_error = false;
+  is_timeout = false;
 
   if (count >= MULTI_PRESS_COUNT) {
     continuous_run = true;
@@ -291,7 +291,7 @@ void motor_control() {
     continuous_run = false;
     is_front = false;
     front_time = 0;
-    is_error = true;
+    is_timeout = true;
     while (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW) {
     }
     return;
@@ -322,7 +322,7 @@ void motor_control() {
 
     is_front = false;
     front_time = 0;
-    is_error = false;
+    is_timeout = false;
     WRITE_EN_PIN(1);
 
     return; // no filament, exit
@@ -335,7 +335,7 @@ void motor_control() {
   digitalWrite(START_LED, HIGH);
 
   // Check for error condition
-  if (is_error) {
+  if (is_timeout) {
     // Stop motor
     driver.VACTUAL(STOP); // stop
     motor_state = Stop;
@@ -402,7 +402,7 @@ void timer_it_callback() {
   if (is_front) { // when pushing forward
     front_time++;
     if (front_time > timeout) { // timeout reached
-      is_error = true;
+      is_timeout = true;
     }
   }
 }
