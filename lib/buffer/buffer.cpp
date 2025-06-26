@@ -46,7 +46,7 @@ constexpr uint32_t TOGGLE_INTERVAL_MS = 500U;
 constexpr uint32_t SERIAL_BAUDRATE = 9600U;
 constexpr uint8_t DRIVER_TOFF = 5U;
 constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
-constexpr uint32_t DEFAULT_SHORT_PRESS_TIMEOUT = 100U; // ms
+constexpr uint32_t DEFAULT_SHORT_PRESS_TIMEOUT = 300U; // ms
 constexpr uint8_t SHORT_PRESS_PREFIX_LEN = 5U;
 
 // number of presses required to enable continuous movement
