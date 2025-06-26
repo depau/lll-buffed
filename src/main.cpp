@@ -5,7 +5,7 @@
 
 void setup() {
   SerialUSB.begin(115200);
-  SerialUSB.dtr(false);
+  // SerialUSB.dtr(false);
   buffer_init();
 }
 

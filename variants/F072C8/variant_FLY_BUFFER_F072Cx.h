@@ -92,7 +92,7 @@
 
 // UART Definitions
 // Define here Serial instance number to map on Serial generic name
-#define SERIAL_UART_INSTANCE    1
+#define SERIAL_UART_INSTANCE    2
 
 // Default pin used for 'Serial' instance
 // Mandatory for Firmata
