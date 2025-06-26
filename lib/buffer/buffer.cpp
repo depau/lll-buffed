@@ -298,6 +298,19 @@ void motor_control() {
   static uint32_t last_key2_time = 0;
   static uint8_t key2_count = 0;
 
+  // stop and trigger error when both buttons are pressed simultaneously
+  if (digitalRead(KEY1) == LOW && digitalRead(KEY2) == LOW) {
+    stopMotor();
+    motor_state = Stop;
+    continuous_run = false;
+    is_front = false;
+    front_time = 0;
+    is_error = true;
+    while (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW) {
+    }
+    return;
+  }
+
   if (handleContinuousRun(last_motor_state)) {
     return;
   }
