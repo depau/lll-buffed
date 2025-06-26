@@ -28,7 +28,6 @@
 #define LIB_BUFFER_BUFFER_H
 
 #include <Arduino.h>
-#include <EEPROM.h>
 #include <TMCStepper.h>
 
 #define HALL1 PB2 // optical sensor 3

@@ -36,9 +36,7 @@ Motor_State motor_state = Stop;
 
 bool is_front = false; // forward flag
 uint32_t front_time = 0; // forward time
-constexpr int EEPROM_ADDR_TIMEOUT = 0;
 constexpr uint32_t DEFAULT_TIMEOUT = 60000U;
-constexpr uint32_t EEPROM_EMPTY = 0xFFFFFFFFU;
 constexpr uint32_t TIMER_PRESCALE = 48U;
 constexpr uint32_t TIMER_OVERFLOW = 1000U;
 constexpr uint32_t ONE_SECOND_MS = 1000U;
@@ -68,17 +66,6 @@ void buffer_init() {
   buffer_sensor_init();
   buffer_motor_init();
   delay(ONE_SECOND_MS);
-
-  EEPROM.get(EEPROM_ADDR_TIMEOUT, timeout);
-  // Check whether the read value is valid (e.g. before first write it may be EEPROM_EMPTY or 0)
-  if (timeout == EEPROM_EMPTY || timeout == 0) {
-    timeout = DEFAULT_TIMEOUT;
-    EEPROM.put(EEPROM_ADDR_TIMEOUT, timeout);
-    Serial.println("EEPROM is empty");
-  } else {
-    Serial.print("read timeout: ");
-    Serial.println(timeout);
-  }
 
   timer.pause();
   timer.setPrescaleFactor(TIMER_PRESCALE); // divide by 48 -> 48 MHz / 48 = 1 MHz
@@ -156,7 +143,6 @@ void buffer_loop() {
           continue;
         }
         timeout = num;
-        EEPROM.put(EEPROM_ADDR_TIMEOUT, timeout);
         serial_buf = "";
         Serial.print("set succeed! timeout=");
         Serial.println(timeout);
