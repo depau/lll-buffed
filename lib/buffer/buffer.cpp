@@ -24,6 +24,7 @@
   ***************************************************************************************
 **/
 
+#include <USBSerial.h>
 #include <array>
 #include <cstdio>
 
@@ -90,8 +91,8 @@ void buffer_loop() {
 
 #if DEBUG
     buffer_debug();
-    while (Serial.available() > 0) {
-      const char incoming_char = Serial.read();
+    while (SerialUSB.available() > 0) {
+      const char incoming_char = SerialUSB.read();
       serial_buf += incoming_char;
       int pos_enter = -1;
       pos_enter = serial_buf.indexOf("\n");
@@ -114,41 +115,41 @@ void buffer_loop() {
             gconf.sr = hexValue; // assume sr is the raw register field
           }
           driver.GCONF(gconf.sr);
-          Serial.print("write GCONF:0x");
-          Serial.println(gconf.sr, HEX);
-          Serial.print("read GCONF: 0x");
-          Serial.println(driver.GCONF(), HEX);
+          SerialUSB.print("write GCONF:0x");
+          SerialUSB.println(gconf.sr, HEX);
+          SerialUSB.print("read GCONF: 0x");
+          SerialUSB.println(driver.GCONF(), HEX);
         }
       }
     }
 #else
     motor_control();
 
-    while (Serial.available() > 0) {
-      const char incoming_char = Serial.read();
+    while (SerialUSB.available() > 0) {
+      const char incoming_char = SerialUSB.read();
       serial_buf += incoming_char;
     }
     if (serial_buf.length() > 0) {
 
       if (serial_buf == "rt") {
-        Serial.print("read timeout=");
-        Serial.println(timeout);
+        SerialUSB.print("read timeout=");
+        SerialUSB.println(timeout);
         serial_buf = "";
       } else if (serial_buf.startsWith("set")) {
         serial_buf.remove(0, 3);
         const int64_t num = serial_buf.toInt();
         if (num < 0 || num > MAX_TIMEOUT) { // keep numeric limit check
           serial_buf = "";
-          Serial.println("Error: Invalid timeout value.");
+          SerialUSB.println("Error: Invalid timeout value.");
           continue;
         }
         timeout = num;
         serial_buf = "";
-        Serial.print("set succeed! timeout=");
-        Serial.println(timeout);
+        SerialUSB.print("set succeed! timeout=");
+        SerialUSB.println(timeout);
       } else {
-        Serial.println(serial_buf.c_str());
-        Serial.println("command error!");
+        SerialUSB.println(serial_buf.c_str());
+        SerialUSB.println("command error!");
         serial_buf = "";
       }
     }
@@ -408,16 +409,22 @@ void timer_it_callback() {
 }
 
 void buffer_debug() {
-  // Serial.print("buffer1_pos1_sensor_state:");Serial.println(buffer.buffer1_pos1_sensor_state);
-  // Serial.print("buffer1_pos2_sensor_state:");Serial.println(buffer.buffer1_pos2_sensor_state);
-  // Serial.print("buffer1_pos3_sensor_state:");Serial.println(buffer.buffer1_pos3_sensor_state);
-  // Serial.print("buffer1_material_swtich_state:");Serial.println(buffer.buffer1_material_swtich_state);
-  // Serial.print("key1:");Serial.println(buffer.key1);
-  // Serial.print("key2:");Serial.println(buffer.key2);
+  // SerialUSB.print("buffer1_pos1_sensor_state:");
+  // SerialUSB.println(buffer.buffer1_pos1_sensor_state);
+  // SerialUSB.print("buffer1_pos2_sensor_state:");
+  // SerialUSB.println(buffer.buffer1_pos2_sensor_state);
+  // SerialUSB.print("buffer1_pos3_sensor_state:");
+  // SerialUSB.println(buffer.buffer1_pos3_sensor_state);
+  // SerialUSB.print("buffer1_material_swtich_state:");
+  // SerialUSB.println(buffer.buffer1_material_swtich_state);
+  // SerialUSB.print("key1:");
+  // SerialUSB.println(buffer.key1);
+  // SerialUSB.print("key2:");
+  // SerialUSB.println(buffer.key2);
   static int idx = 0;
   if (idx < MAX_INDEX) {
-    Serial.print("i:");
-    Serial.println(idx);
+    SerialUSB.print("i:");
+    SerialUSB.println(idx);
     driver.GCONF(idx);
     driver.PWMCONF(idx);
     idx++;
@@ -426,19 +433,19 @@ void buffer_debug() {
   const uint32_t chopconf = driver.CHOPCONF();
   const uint32_t pwmconf = driver.PWMCONF();
   if (driver.CRCerror) {
-    Serial.println("CRCerror");
+    SerialUSB.println("CRCerror");
   } else {
-    Serial.print("GCONF():0x");
-    Serial.println(gconf, HEX);
-    Serial.print("CHOPCONF():0x");
+    SerialUSB.print("GCONF():0x");
+    SerialUSB.println(gconf, HEX);
+    SerialUSB.print("CHOPCONF():0x");
     String buf = String(chopconf, HEX);
     buf.toUpperCase();
-    Serial.println(buf);
-    Serial.print("PWMCONF():0x");
+    SerialUSB.println(buf);
+    SerialUSB.print("PWMCONF():0x");
     buf = String(pwmconf, HEX);
     buf.toUpperCase();
-    Serial.println(buf);
-    Serial.println("");
+    SerialUSB.println(buf);
+    SerialUSB.println("");
   }
   delay(ONE_SECOND_MS);
 }
