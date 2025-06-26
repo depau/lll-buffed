@@ -51,10 +51,9 @@
 #define DRIVER_ADDRESS 0b00 // TMC Driver address according to MS1 and MS2
 #define R_SENSE 0.11f // Match to your driver
 
-#define SPEED 300 // speed (r/min)
+inline constexpr float SPEED = 300.0f; // speed in r/min
 inline constexpr int32_t MOVE_DIVIDE_NUM = 64;
-inline constexpr uint32_t VACTUAL_VALUE = static_cast<uint32_t>(static_cast<float>(SPEED) * MOVE_DIVIDE_NUM * 200.0f /
-                                                                60.0f / 0.715f);
+inline constexpr uint32_t VACTUAL_VALUE = static_cast<uint32_t>(SPEED * MOVE_DIVIDE_NUM * 200.0f / 60.0f / 0.715f);
 
 #define STOP 0 // stop
 #define I_CURRENT (600) // motor current
