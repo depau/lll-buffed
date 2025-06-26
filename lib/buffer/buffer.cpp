@@ -285,7 +285,12 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
     is_front = false;
     front_time = 0;
     is_timeout = true;
-    count = 0;
+    if (count >= MULTI_PRESS_COUNT) {
+      continuous_run = true;
+      continuous_direction = dir;
+      is_timeout = false;
+      count = 0;
+    }
     return true;
   }
 
