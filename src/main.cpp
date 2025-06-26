@@ -1,10 +1,11 @@
 #include <Arduino.h>
+#include <USBSerial.h>
 
 #include "buffer.h"
 
 void setup() {
-  Serial.begin(115200);
-  Serial.dtr(false);
+  SerialUSB.begin(115200);
+  SerialUSB.dtr(false);
   buffer_init();
 }
 
