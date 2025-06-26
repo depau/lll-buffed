@@ -44,7 +44,7 @@
 #define STEP_PIN PC13 // step
 #define UART PB1 // software serial
 
-#define DUANLIAO PB15 // filament break indicator
+#define FILAMENT_BREAK_INDICATOR PB15 // filament break indicator
 #define ERR_LED PA15 // error LED
 #define START_LED PA8 // start LED
 

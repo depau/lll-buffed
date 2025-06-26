@@ -168,7 +168,7 @@ void buffer_sensor_init() {
   pinMode(KEY2, INPUT);
 
   // Initialize filament indicator LEDs
-  pinMode(DUANLIAO, OUTPUT);
+  pinMode(FILAMENT_BREAK_INDICATOR, OUTPUT);
   pinMode(ERR_LED, OUTPUT);
   pinMode(START_LED, OUTPUT);
 }
@@ -274,7 +274,7 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
 } // namespace
 
 /**
- * @brief  电机控制
+ * @brief  Motor control
  * @param  NULL
  * @retval NULL
  **/
@@ -316,7 +316,7 @@ void motor_control() {
     motor_state = Stop;
 
     // Pull filament-break pin low
-    digitalWrite(DUANLIAO, LOW);
+    digitalWrite(FILAMENT_BREAK_INDICATOR, LOW);
 
     // Turn off indicator LED
     digitalWrite(START_LED, LOW);
@@ -330,7 +330,7 @@ void motor_control() {
   }
 
   // Filament present, set filament-break pin high
-  digitalWrite(DUANLIAO, HIGH);
+  digitalWrite(FILAMENT_BREAK_INDICATOR, HIGH);
 
   // Turn on indicator LED
   digitalWrite(START_LED, HIGH);
