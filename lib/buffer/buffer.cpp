@@ -46,6 +46,8 @@ constexpr uint32_t TOGGLE_INTERVAL_MS = 500U;
 constexpr uint32_t SERIAL_BAUDRATE = 9600U;
 constexpr uint8_t DRIVER_TOFF = 5U;
 constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
+constexpr uint32_t DEFAULT_SHORT_PRESS_TIMEOUT = 100U; // ms
+constexpr uint8_t SHORT_PRESS_PREFIX_LEN = 5U;
 
 // number of presses required to enable continuous movement
 constexpr uint8_t MULTI_PRESS_COUNT = 3U;
@@ -55,6 +57,7 @@ constexpr uint32_t MULTI_PRESS_MIN_INTERVAL_MS = 50U;
 constexpr uint32_t MULTI_PRESS_MAX_INTERVAL_MS = 500U;
 
 uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
+uint32_t short_press_timeout = DEFAULT_SHORT_PRESS_TIMEOUT; // short press duration
 bool is_timeout = false; // error flag, set if pushing filament for 30s without stopping
 bool continuous_run = false; // flag for continuous movement
 Motor_State continuous_direction = Stop; // direction for continuous movement
@@ -126,7 +129,7 @@ void buffer_loop() {
     motor_control();
 
     while (SerialUSB.available() > 0) {
-      const char incoming_char = SerialUSB.read();
+      const char incoming_char = static_cast<char>(SerialUSB.read());
       serial_buf += incoming_char;
     }
     if (serial_buf.length() > 0) {
@@ -135,6 +138,22 @@ void buffer_loop() {
         SerialUSB.print("read timeout=");
         SerialUSB.println(timeout);
         serial_buf = "";
+      } else if (serial_buf == "rsp") {
+        SerialUSB.print("read short_press_timeout=");
+        SerialUSB.println(short_press_timeout);
+        serial_buf = "";
+      } else if (serial_buf.startsWith("setsp")) {
+        serial_buf.remove(0, SHORT_PRESS_PREFIX_LEN);
+        const int64_t num = serial_buf.toInt();
+        if (num < 0 || num > MAX_TIMEOUT) {
+          serial_buf = "";
+          SerialUSB.println("Error: Invalid short press value.");
+          continue;
+        }
+        short_press_timeout = num;
+        serial_buf = "";
+        SerialUSB.print("set succeed! short_press_timeout=");
+        SerialUSB.println(short_press_timeout);
       } else if (serial_buf.startsWith("set")) {
         serial_buf.remove(0, 3);
         const int64_t num = serial_buf.toInt();
@@ -247,6 +266,7 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
   if (digitalRead(pin) != LOW) {
     return false;
   }
+
   const uint32_t now = millis();
   if (now - last_time >= MULTI_PRESS_MIN_INTERVAL_MS && now - last_time <= MULTI_PRESS_MAX_INTERVAL_MS) {
     count++;
@@ -254,6 +274,20 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
     count = 1;
   }
   last_time = now;
+
+  const uint32_t press_start = millis();
+  while (digitalRead(pin) == LOW && millis() - press_start <= short_press_timeout) {
+  }
+
+  if (digitalRead(pin) == HIGH && millis() - press_start <= short_press_timeout) {
+    // short press detected
+    motor_state = Stop;
+    is_front = false;
+    front_time = 0;
+    is_timeout = true;
+    count = 0;
+    return true;
+  }
 
   startMotor(dir, last_motor_state);
   while (digitalRead(pin) == LOW) {
