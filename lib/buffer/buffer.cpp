@@ -36,7 +36,7 @@ Motor_State motor_state = Stop;
 
 bool is_front = false; // forward flag
 uint32_t front_time = 0; // forward time
-constexpr uint32_t DEFAULT_TIMEOUT = 60000U;
+constexpr uint32_t DEFAULT_TIMEOUT = 90000U;
 constexpr uint32_t TIMER_PRESCALE = 48U;
 constexpr uint32_t TIMER_OVERFLOW = 1000U;
 constexpr uint32_t ONE_SECOND_MS = 1000U;
