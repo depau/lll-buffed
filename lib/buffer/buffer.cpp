@@ -47,6 +47,9 @@ constexpr uint32_t SERIAL_BAUDRATE = 9600U;
 constexpr uint8_t DRIVER_TOFF = 5U;
 constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
 
+// duration (ms) for a press to be considered "short"
+constexpr uint32_t SHORT_PRESS_MAX_DURATION_MS = 150U;
+
 // number of presses required to enable continuous movement
 constexpr uint8_t MULTI_PRESS_COUNT = 3U;
 // minimum time between presses to be considered part of the same sequence (ms)
@@ -256,15 +259,28 @@ auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
   last_time = now;
 
   startMotor(dir, last_motor_state);
+  const uint32_t press_start = millis();
   while (digitalRead(pin) == LOW) {
   }
+  const uint32_t duration = millis() - press_start;
   stopMotor();
   motor_state = Stop;
   is_front = false;
   front_time = 0;
-  is_timeout = false;
 
-  if (count >= MULTI_PRESS_COUNT) {
+  const bool enable_continuous = count >= MULTI_PRESS_COUNT;
+
+  if (duration <= SHORT_PRESS_MAX_DURATION_MS && !enable_continuous) {
+    if (is_timeout) {
+      is_timeout = false; // resume from timeout
+    } else {
+      is_timeout = true; // trigger stop as if timed out
+    }
+  } else {
+    is_timeout = false;
+  }
+
+  if (enable_continuous) {
     continuous_run = true;
     continuous_direction = dir;
     count = 0;
