@@ -89,7 +89,7 @@ extern void read_sensor_state();
 extern void motor_control();
 
 extern void buffer_init();
-extern void buffer_loop();
+[[noreturn]] extern void buffer_loop();
 extern void timer_it_callback();
 extern void buffer_debug();
 

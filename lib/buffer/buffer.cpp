@@ -78,12 +78,12 @@ void buffer_init() {
   timer.resume();
 }
 
-void buffer_loop() {
+[[noreturn]] void buffer_loop() {
 
   static String serial_buf;
   uint32_t lastToggleTime = millis(); // remember the last toggle time
-  while (true) {
 
+  while (true) {
     if (millis() - lastToggleTime >= TOGGLE_INTERVAL_MS) // toggle every 500ms
     {
       lastToggleTime = millis(); // update current time
@@ -102,7 +102,7 @@ void buffer_loop() {
       if (pos_enter != -1) {
         String str = serial_buf.substring(0, pos_enter);
         serial_buf = serial_buf.substring(pos_enter + 1);
-        if (strstr(str.c_str(), "gconf") != NULL) {
+        if (strstr(str.c_str(), "gconf") != nullptr) {
           TMC2208_n::CHOPCONF_t gconf{ 0 };
 
           // Extract the hexadecimal string after "gconf"
@@ -112,7 +112,7 @@ void buffer_loop() {
             hexPart.trim(); // remove whitespace
 
             // Convert the string to a 32-bit unsigned integer
-            uint32_t hexValue = strtoul(hexPart.c_str(), NULL, 16);
+            uint32_t hexValue = strtoul(hexPart.c_str(), nullptr, 16);
 
             // Assign it to the struct (according to your definition)
             gconf.sr = hexValue; // assume sr is the raw register field
@@ -174,7 +174,7 @@ void buffer_sensor_init() {
   pinMode(FILAMENT_BREAK_INDICATOR, OUTPUT);
   pinMode(ERR_LED, OUTPUT);
   pinMode(START_LED, OUTPUT);
-}pi
+}
 
 void buffer_motor_init() {
   // Initialize motor driver pins
@@ -197,8 +197,7 @@ void buffer_motor_init() {
 
 /**
  * @brief  Read the state of all sensors
- * @param  NULL
- * @retval NULL
+ * @retval nullptr
  **/
 void read_sensor_state() {
   buffer.buffer1_pos1_sensor_state = digitalRead(HALL3) != 0;
@@ -287,8 +286,7 @@ bool handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
 
 /**
  * @brief  Motor control
- * @param  NULL
- * @retval NULL
+ * @retval nullptr
  **/
 void motor_control() {
   static Motor_State last_motor_state = Stop;
