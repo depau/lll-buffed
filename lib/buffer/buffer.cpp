@@ -129,8 +129,8 @@ void buffer_loop() {
     motor_control();
 
     while (SerialUSB.available() > 0) {
-      const char incoming_char = SerialUSB.read();
-      serial_buf += incoming_char;
+      const int incoming_char = SerialUSB.read();
+      serial_buf += static_cast<const char>(incoming_char);
     }
     if (serial_buf.length() > 0) {
 
@@ -245,6 +245,7 @@ bool handleContinuousRun(Motor_State &last_motor_state) {
   return true;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters)
 bool handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &count, Motor_State &last_motor_state) {
   if (digitalRead(pin) != LOW) {
     return false;
@@ -270,11 +271,7 @@ bool handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
   const bool enable_continuous = count >= MULTI_PRESS_COUNT;
 
   if (duration <= SHORT_PRESS_MAX_DURATION_MS && !enable_continuous) {
-    if (is_timeout) {
-      is_timeout = false; // resume from timeout
-    } else {
-      is_timeout = true; // trigger stop as if timed out
-    }
+    is_timeout = !is_timeout; // toggle timeout state
   } else {
     is_timeout = false;
   }
