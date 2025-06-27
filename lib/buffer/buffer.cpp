@@ -51,7 +51,7 @@ constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
 constexpr uint32_t SHORT_PRESS_MAX_DURATION_MS = 150U;
 
 // number of presses required to enable continuous movement
-constexpr uint8_t MULTI_PRESS_COUNT = 3U;
+constexpr uint8_t MULTI_PRESS_COUNT = 2U;
 // minimum time between presses to be considered part of the same sequence (ms)
 constexpr uint32_t MULTI_PRESS_MIN_INTERVAL_MS = 50U;
 // maximum time between presses to be considered part of the same sequence (ms)
