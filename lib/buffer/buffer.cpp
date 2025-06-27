@@ -174,7 +174,7 @@ void buffer_sensor_init() {
   pinMode(FILAMENT_BREAK_INDICATOR, OUTPUT);
   pinMode(ERR_LED, OUTPUT);
   pinMode(START_LED, OUTPUT);
-}
+}pi
 
 void buffer_motor_init() {
   // Initialize motor driver pins
@@ -224,7 +224,7 @@ void stopMotor() {
   driver.VACTUAL(STOP);
 }
 
-auto handleContinuousRun(Motor_State &last_motor_state) -> bool {
+bool handleContinuousRun(Motor_State &last_motor_state) {
   if (!continuous_run) {
     return false;
   }
@@ -245,8 +245,7 @@ auto handleContinuousRun(Motor_State &last_motor_state) -> bool {
   return true;
 }
 
-auto handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &count, Motor_State &last_motor_state)
-  -> bool {
+bool handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &count, Motor_State &last_motor_state) {
   if (digitalRead(pin) != LOW) {
     return false;
   }
