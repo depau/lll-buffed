@@ -62,7 +62,7 @@ private:
   void handleSerialMove();
   void handleContinuous();
   void updateHoldTimeout();
-  void updateStatus();
+  void updateStatus(bool force = false);
   void setMotor(Motor m);
 
   BufferHardware &hw;

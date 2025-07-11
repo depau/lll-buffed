@@ -133,7 +133,7 @@ void Buffer::init() {
   lastMotor = motor;
   hw.setPresenceLed(filamentPresent);
   hw.setPresenceOutput(filamentPresent);
-  updateStatus();
+  updateStatus(true);
 }
 
 void Buffer::setMotor(Motor m) {
@@ -202,7 +202,7 @@ void Buffer::handleCommand(const std::string &cmd) {
     mode = Mode::Off;
     setMotor(Motor::Off);
   } else if (cmd == "query" || cmd == "q") {
-    updateStatus();
+    updateStatus(true);
   } else if (cmd.rfind("move", 0) == 0 || cmd.rfind("m ", 0) == 0) {
     size_t pos = cmd.find(' ');
     if (pos != std::string::npos) {
@@ -354,13 +354,13 @@ void Buffer::updateHoldTimeout() {
   }
 }
 
-void Buffer::updateStatus() {
+void Buffer::updateStatus(bool force) {
   bool fil = hw.filamentPresent();
-  if (fil != lastFilament) {
+  if (fil != lastFilament || force) {
     hw.writeLine(std::string("filament_present=") + (fil ? "1" : "0"));
     lastFilament = fil;
   }
-  if (mode != lastMode) {
+  if (mode != lastMode || force) {
     const char *modeStr = "";
     switch (mode) {
     case Mode::Regular:
@@ -385,7 +385,7 @@ void Buffer::updateStatus() {
     hw.writeLine(std::string("mode=") + modeStr);
     lastMode = mode;
   }
-  if (motor != lastMotor) {
+  if (motor != lastMotor || force) {
     const char *statusStr = "";
     switch (motor) {
     case Motor::Push:
@@ -404,7 +404,7 @@ void Buffer::updateStatus() {
     hw.writeLine(std::string("status=") + statusStr);
     lastMotor = motor;
   }
-  if (timedOut != lastTimedOut) {
+  if (timedOut != lastTimedOut || force) {
     hw.writeLine(std::string("timed_out=") + (timedOut ? "1" : "0"));
     lastTimedOut = timedOut;
   }
