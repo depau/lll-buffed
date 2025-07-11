@@ -1,96 +1,103 @@
-/**
-  ***************************************************************************************
-  * @file    buffer.cpp
-  * @author  lijihu
-  * @version V1.0.0
-  * @date    2025/05/10
- * @brief   Implementation of the buffer functionality
-        *Buffer description
-        Optical sensor: 1 when blocked, 0 when unblocked
-        Filament switch: 0 when filament present, 1 when absent
-        Button: 0 when pressed, 1 when released
+#pragma once
 
-        Pins:
-        HALL1 --> PB2 (optical sensor 3)
-        HALL2 --> PB3 (optical sensor 2)
-        HALL3 --> PB4 (optical sensor 1)
-        ENDSTOP_3 --> PB7 (filament switch)
-        KEY1 --> PB13 (backward)
-        KEY2 --> PB12 (forward)
-  *
-  * @note
-  ***************************************************************************************
- * Copyright 2024 xxx@126.com
-  ***************************************************************************************
-**/
+#include <cstdint>
+#include <string>
 
-#ifndef LIB_BUFFER_BUFFER_H
-#define LIB_BUFFER_BUFFER_H
+/** Hardware abstraction for the filament buffer */
+class BufferHardware {
+public:
+  virtual ~BufferHardware() = default;
+  virtual bool optical1() = 0; ///< sensor near the spool
+  virtual bool optical2() = 0; ///< middle sensor
+  virtual bool optical3() = 0; ///< sensor near the extruder
+  virtual bool filamentPresent() = 0; ///< true if filament detected
+  virtual bool buttonForward() = 0; ///< forward jog button pressed
+  virtual bool buttonBackward() = 0; ///< backward jog button pressed
+  virtual void setErrorLed(bool on) = 0; ///< control error LED
+  virtual void setPresenceLed(bool on) = 0; ///< control presence LED
+  virtual void setPresenceOutput(bool on) = 0; ///< signal filament presence
+  virtual void stepperPush(float speed) = 0; ///< run stepper forward
+  virtual void stepperRetract(float speed) = 0; ///< run stepper backward
+  virtual void stepperHold() = 0; ///< enable driver holding torque
+  virtual void stepperOff() = 0; ///< disable driver
+  virtual void writeLine(const std::string &l) = 0; ///< send status line
+  virtual bool readChar(char &c) = 0; ///< read a byte from serial if available
+  virtual uint32_t timeMs() = 0; ///< milliseconds counter
+  virtual void initHardware() {}
+};
 
-#include <Arduino.h>
-#include <TMCStepper.h>
+/** High level buffer controller */
+class Buffer {
+public:
+  explicit Buffer(BufferHardware &h);
+  void init();
+  void loop();
 
-#define HALL1 PB2 // optical sensor 3
-#define HALL2 PB3 // optical sensor 2
-#define HALL3 PB4 // optical sensor 1
+private:
+  enum class Mode {
+    Regular,
+    Continuous,
+    SerialMove,
+    Hold,
+    Manual,
+    Off
+  };
+  enum class Motor {
+    Push,
+    Retract,
+    Hold,
+    Off
+  };
+  struct ButtonState {
+    bool pressed{ false };
+    uint32_t pressStart{ 0 };
+    uint32_t lastRelease{ 0 };
+    uint8_t count{ 0 };
+  };
 
-#define ENDSTOP_3 PB7 // filament switch
+  void processSerial();
+  void handleCommand(const std::string &cmd);
+  void handleButtons();
+  void handleRegular();
+  void handleSerialMove();
+  void handleContinuous();
+  void updateHoldTimeout();
+  void updateStatus();
+  void setMotor(Motor m);
 
-#define KEY1 PB13 // backward
-#define KEY2 PB12 // forward
+  BufferHardware &hw;
+  Mode mode{ Mode::Off };
+  Motor motor{ Motor::Off };
 
-#define EN_PIN PA6 // enable
-#define DIR_PIN PA7 // direction
-#define STEP_PIN PC13 // step
-#define UART PB1 // software serial
+  uint32_t timeoutMs{ 90000 };
+  uint32_t holdTimeoutMs{ 60000 };
+  bool holdTimeoutEnabled{ false };
+  uint8_t multiPressCount{ 2 };
+  float speedMmS{ 30.0f };
 
-#define FILAMENT_BREAK_INDICATOR PB15 // filament break indicator
-#define ERR_LED PA15 // error LED
-#define START_LED PA8 // start LED
+  bool filamentPresent{ false };
+  bool timedOut{ false };
 
-#define DRIVER_ADDRESS 0b00 // TMC Driver address according to MS1 and MS2
-#define R_SENSE 0.11f // Match to your driver
+  ButtonState btnFwd;
+  ButtonState btnBack;
 
-inline constexpr double SPEED_MM_S_DEFAULT = 30.0;
-inline constexpr double SPEED_MULTIPLIER = 9.1463414634;
-inline constexpr int32_t MOVE_DIVIDE_NUM = 16;
+  std::string cmdBuf;
+  uint32_t lastCharTime{ 0 };
 
-#define STOP 0 // stop
-#define I_CURRENT (600) // motor current
-#define WRITE_EN_PIN(x) digitalWrite(EN_PIN, x) // toggle EN pin
-#define FORWARD 1 // filament direction forward
-#define BACK 0
+  uint32_t moveEnd{ 0 };
+  Motor moveDir{ Motor::Off };
 
-#define DEBUG 0
+  uint32_t moveStart{ 0 };
+  uint32_t holdStart{ 0 };
+  uint32_t continuousStart{ 0 };
 
-// Structure storing the state of each sensor in the buffer
-typedef struct Buffer {
-  // buffer1
-  bool buffer1_pos1_sensor_state;
-  bool buffer1_pos2_sensor_state;
-  bool buffer1_pos3_sensor_state;
-  bool buffer1_material_swtich_state;
-  bool key1;
-  bool key2;
+  Mode lastMode{ Mode::Off };
+  Motor lastMotor{ Motor::Off };
+  bool lastFilament{ false };
+  bool lastTimedOut{ false };
+};
 
-} Buffer;
-
-// Motor state enumeration
-typedef enum {
-  Forward = 0, // forward
-  Stop, // stop
-  Back // backward
-} Motor_State;
-
-extern void buffer_sensor_init();
-extern void buffer_motor_init();
-
-extern void read_sensor_state();
-extern void motor_control();
-
-extern void buffer_init();
-[[noreturn]] extern void buffer_loop();
-extern void timer_it_callback();
-extern void buffer_debug();
-
-#endif // LIB_BUFFER_BUFFER_H
+#ifdef ARDUINO
+void buffer_init();
+void buffer_loop();
+#endif
