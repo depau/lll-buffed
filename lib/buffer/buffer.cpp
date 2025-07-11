@@ -51,16 +51,76 @@ constexpr uint32_t MAX_TIMEOUT = 0xFFFFFFFFU;
 constexpr uint32_t SHORT_PRESS_MAX_DURATION_MS = 150U;
 
 // number of presses required to enable continuous movement
-constexpr uint8_t MULTI_PRESS_COUNT = 2U;
+constexpr uint8_t DEFAULT_MULTI_PRESS_COUNT = 2U;
+uint8_t multi_press_count = DEFAULT_MULTI_PRESS_COUNT;
 // minimum time between presses to be considered part of the same sequence (ms)
 constexpr uint32_t MULTI_PRESS_MIN_INTERVAL_MS = 50U;
 // maximum time between presses to be considered part of the same sequence (ms)
 constexpr uint32_t MULTI_PRESS_MAX_INTERVAL_MS = 500U;
 
+constexpr size_t CMD_BUF_MAX_LEN = 64U;
+constexpr uint32_t CMD_TIMEOUT_MS = 3000U;
+
+uint32_t last_char_time = 0;
+String command_buffer;
+
+enum class MoveReport {
+  F,
+  B,
+  FPLUS,
+  BPLUS,
+  S,
+  T,
+  O,
+  NONE
+};
+MoveReport last_move_report = MoveReport::NONE;
+bool filament_present = true;
+bool last_filament_present = true;
+bool motor_on = true;
+
 uint32_t timeout = DEFAULT_TIMEOUT; // timeout in ms
 bool is_timeout = false; // error flag, set if pushing filament for 30s without stopping
 bool continuous_run = false; // flag for continuous movement
 Motor_State continuous_direction = Stop; // direction for continuous movement
+
+void sendMessage(const String &msg) {
+  SerialUSB.println(msg);
+  Serial2.println(msg);
+}
+
+void sendMovement(MoveReport r) {
+  if (r == last_move_report) {
+    return;
+  }
+  last_move_report = r;
+  switch (r) {
+  case MoveReport::F:
+    sendMessage("f");
+    break;
+  case MoveReport::B:
+    sendMessage("b");
+    break;
+  case MoveReport::FPLUS:
+    sendMessage("f+");
+    break;
+  case MoveReport::BPLUS:
+    sendMessage("b+");
+    break;
+  case MoveReport::S:
+    sendMessage("s");
+    break;
+  case MoveReport::T:
+    sendMessage("t");
+    break;
+  case MoveReport::O:
+    sendMessage("o");
+    break;
+  case MoveReport::NONE:
+    break;
+  }
+}
+
 } // namespace
 
 void buffer_init() {
@@ -78,10 +138,19 @@ void buffer_init() {
   timer.resume();
 }
 
-[[noreturn]] void buffer_loop() {
+MoveReport currentMoveReport();
+void reportAllStatus();
+void handleCommand(const String &cmd);
+void processSerialInput();
+void updateStatus();
 
-  static String serial_buf;
+[[noreturn]] void buffer_loop() {
   uint32_t lastToggleTime = millis(); // remember the last toggle time
+
+  sendMessage(String("timeout ") + timeout);
+  sendMessage(String("multi_press_count ") + multi_press_count);
+  last_filament_present = digitalRead(ENDSTOP_3) == 0;
+  sendMessage(last_filament_present ? "p1" : "p0");
 
   while (true) {
     if (millis() - lastToggleTime >= TOGGLE_INTERVAL_MS) // toggle every 500ms
@@ -93,6 +162,7 @@ void buffer_init() {
     read_sensor_state();
 
 #if DEBUG
+    static String serial_buf;
     buffer_debug();
     while (SerialUSB.available() > 0) {
       const char incoming_char = SerialUSB.read();
@@ -127,36 +197,8 @@ void buffer_init() {
     }
 #else
     motor_control();
-
-    while (SerialUSB.available() > 0) {
-      const int incoming_char = SerialUSB.read();
-      serial_buf += static_cast<const char>(incoming_char);
-    }
-    if (serial_buf.length() > 0) {
-
-      if (serial_buf == "rt") {
-        SerialUSB.print("read timeout=");
-        SerialUSB.println(timeout);
-        serial_buf = "";
-      } else if (serial_buf.startsWith("set")) {
-        serial_buf.remove(0, 3);
-        const int64_t num = serial_buf.toInt();
-        if (num < 0 || num > MAX_TIMEOUT) { // keep numeric limit check
-          serial_buf = "";
-          SerialUSB.println("Error: Invalid timeout value.");
-          continue;
-        }
-        timeout = num;
-        serial_buf = "";
-        SerialUSB.print("set succeed! timeout=");
-        SerialUSB.println(timeout);
-      } else {
-        SerialUSB.println(serial_buf.c_str());
-        SerialUSB.println("command error!");
-        serial_buf = "";
-      }
-    }
-
+    processSerialInput();
+    updateStatus();
 #endif
   }
 }
@@ -209,18 +251,26 @@ void read_sensor_state() {
 }
 
 namespace {
-void startMotor(Motor_State dir, Motor_State last_state) {
+void runMotor(Motor_State dir, Motor_State last_state) {
   WRITE_EN_PIN(0);
   if (dir != last_state) {
     driver.VACTUAL(STOP);
   }
   driver.shaft(dir == Forward ? FORWARD : BACK);
   driver.VACTUAL(VACTUAL_VALUE);
+  motor_on = true;
 }
 
-void stopMotor() {
+void holdMotor() {
+  WRITE_EN_PIN(0);
+  driver.VACTUAL(STOP);
+  motor_on = true;
+}
+
+void disableMotor() {
   WRITE_EN_PIN(1);
   driver.VACTUAL(STOP);
+  motor_on = false;
 }
 
 bool handleContinuousRun(Motor_State &last_motor_state) {
@@ -228,7 +278,7 @@ bool handleContinuousRun(Motor_State &last_motor_state) {
     return false;
   }
   if (digitalRead(KEY1) == LOW || digitalRead(KEY2) == LOW || is_timeout) {
-    stopMotor();
+    holdMotor();
     motor_state = Stop;
     continuous_run = false;
     is_front = false;
@@ -238,7 +288,7 @@ bool handleContinuousRun(Motor_State &last_motor_state) {
     }
     return true;
   }
-  startMotor(continuous_direction, last_motor_state);
+  runMotor(continuous_direction, last_motor_state);
   is_front = continuous_direction == Forward;
   last_motor_state = continuous_direction;
   return true;
@@ -257,17 +307,24 @@ bool handleButton(uint8_t pin, Motor_State dir, uint32_t &last_time, uint8_t &co
   }
   last_time = now;
 
-  startMotor(dir, last_motor_state);
+  runMotor(dir, last_motor_state);
+  last_motor_state = dir;
+  last_move_report = MoveReport::NONE;
+  sendMovement(dir == Forward ? MoveReport::FPLUS : MoveReport::BPLUS);
   const uint32_t press_start = millis();
   while (digitalRead(pin) == LOW) {
   }
   const uint32_t duration = millis() - press_start;
-  stopMotor();
+  if (digitalRead(ENDSTOP_3) == 0) {
+    holdMotor();
+  } else {
+    disableMotor();
+  }
   motor_state = Stop;
   is_front = false;
   front_time = 0;
 
-  const bool enable_continuous = count >= MULTI_PRESS_COUNT;
+  const bool enable_continuous = count >= multi_press_count;
 
   if (duration <= SHORT_PRESS_MAX_DURATION_MS && !enable_continuous) {
     is_timeout = !is_timeout; // toggle timeout state
@@ -321,7 +378,7 @@ void motor_control() {
     is_front = false;
     front_time = 0;
     is_timeout = false;
-    WRITE_EN_PIN(1);
+    disableMotor();
 
     return; // no filament, exit
   }
@@ -337,7 +394,7 @@ void motor_control() {
     // Stop motor
     driver.VACTUAL(STOP); // stop
     motor_state = Stop;
-    WRITE_EN_PIN(1);
+    holdMotor();
     return;
   }
 
@@ -370,28 +427,17 @@ void motor_control() {
   switch (motor_state) {
   case Forward: // forward
   {
-    WRITE_EN_PIN(0);
-    if (last_motor_state == Back) {
-      driver.VACTUAL(STOP); // was moving back, stop before forwarding
-    }
-    driver.shaft(FORWARD);
-    driver.VACTUAL(VACTUAL_VALUE);
+    runMotor(Forward, last_motor_state);
 
   } break;
   case Stop: // stop
   {
-    WRITE_EN_PIN(1);
-    driver.VACTUAL(STOP);
+    holdMotor();
 
   } break;
   case Back: // backward
   {
-    WRITE_EN_PIN(0);
-    if (last_motor_state == Forward) {
-      driver.VACTUAL(STOP); // was moving forward, stop before reversing
-    }
-    driver.shaft(BACK);
-    driver.VACTUAL(VACTUAL_VALUE);
+    runMotor(Back, last_motor_state);
   } break;
   }
 }
@@ -403,6 +449,132 @@ void timer_it_callback() {
       is_timeout = true;
     }
   }
+}
+
+MoveReport currentMoveReport() {
+  if (!motor_on) {
+    return MoveReport::O;
+  }
+  if (is_timeout) {
+    return MoveReport::T;
+  }
+  if (continuous_run) {
+    return continuous_direction == Forward ? MoveReport::FPLUS : MoveReport::BPLUS;
+  }
+  switch (motor_state) {
+  case Forward:
+    return MoveReport::F;
+  case Back:
+    return MoveReport::B;
+  case Stop:
+  default:
+    return MoveReport::S;
+  }
+}
+
+void reportAllStatus() {
+  sendMovement(currentMoveReport());
+  sendMessage(filament_present ? "p1" : "p0");
+  sendMessage(String("timeout ") + timeout);
+  sendMessage(String("multi_press_count ") + multi_press_count);
+}
+
+void handleCommand(const String &cmd) {
+  if (cmd == "f") {
+    continuous_run = true;
+    continuous_direction = Forward;
+    runMotor(Forward, motor_state);
+    motor_state = Forward;
+    sendMovement(MoveReport::FPLUS);
+  } else if (cmd == "b") {
+    continuous_run = true;
+    continuous_direction = Back;
+    runMotor(Back, motor_state);
+    motor_state = Back;
+    sendMovement(MoveReport::BPLUS);
+  } else if (cmd == "s") {
+    is_timeout = true;
+    continuous_run = false;
+    sendMovement(MoveReport::T);
+  } else if (cmd == "n") {
+    continuous_run = false;
+    is_timeout = false;
+    if (digitalRead(ENDSTOP_3) == 0) {
+      holdMotor();
+      motor_state = Stop;
+      sendMovement(MoveReport::S);
+    } else {
+      disableMotor();
+      motor_state = Stop;
+      sendMovement(MoveReport::O);
+    }
+  } else if (cmd == "o") {
+    continuous_run = false;
+    is_timeout = false;
+    disableMotor();
+    motor_state = Stop;
+    sendMovement(MoveReport::O);
+  } else if (cmd == "q") {
+    reportAllStatus();
+  } else if (cmd.startsWith("set_timeout")) {
+    String v = cmd.substring(String("set_timeout").length());
+    v.trim();
+    const int64_t num = v.toInt();
+    if (num >= 0 && static_cast<uint64_t>(num) <= MAX_TIMEOUT) {
+      timeout = static_cast<uint32_t>(num);
+    }
+    sendMessage(String("timeout ") + timeout);
+  } else if (cmd.startsWith("set_multi_press_count")) {
+    String v = cmd.substring(String("set_multi_press_count").length());
+    v.trim();
+    const int num = v.toInt();
+    if (num > 0 && num < 10) {
+      multi_press_count = static_cast<uint8_t>(num);
+    }
+    sendMessage(String("multi_press_count ") + multi_press_count);
+  }
+}
+
+void process_serial_char(char c) {
+  if (c == '\r') {
+    return;
+  }
+  last_char_time = millis();
+  if (c == '\n' || command_buffer.length() >= CMD_BUF_MAX_LEN) {
+    String cmd = command_buffer;
+    cmd.trim();
+    command_buffer = "";
+    if (cmd.length() > 0) {
+      handleCommand(cmd);
+    }
+    return;
+  }
+  command_buffer += c;
+}
+
+void processSerialInput() {
+  while (SerialUSB.available() > 0) {
+    process_serial_char(static_cast<char>(SerialUSB.read()));
+  }
+  while (Serial2.available() > 0) {
+    process_serial_char(static_cast<char>(Serial2.read()));
+  }
+  if (command_buffer.length() > 0 && millis() - last_char_time > CMD_TIMEOUT_MS) {
+    command_buffer = "";
+  }
+}
+
+void updateStatus() {
+  filament_present = digitalRead(ENDSTOP_3) == 0;
+  if (filament_present != last_filament_present) {
+    sendMessage(filament_present ? "p1" : "p0");
+    last_filament_present = filament_present;
+    if (!filament_present) {
+      disableMotor();
+      sendMovement(MoveReport::O);
+    }
+  }
+  sendMovement(currentMoveReport());
 }
 
 void buffer_debug() {
