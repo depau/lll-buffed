@@ -51,7 +51,7 @@
 #define DRIVER_ADDRESS 0b00 // TMC Driver address according to MS1 and MS2
 #define R_SENSE 0.11f // Match to your driver
 
-inline constexpr double SPEED_MM_S = 5;
+inline constexpr double SPEED_MM_S = 30.0;
 inline constexpr double SPEED_MULTIPLIER = 9.1463414634;
 inline constexpr double SPEED_RPM = SPEED_MM_S * SPEED_MULTIPLIER; // speed in r/min
 inline constexpr int32_t MOVE_DIVIDE_NUM = 16;
