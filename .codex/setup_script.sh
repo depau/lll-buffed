@@ -9,3 +9,4 @@ export PATH="$HOME/.platformio/penv/bin:$PATH"
 # Install PlatformIO packages
 pio pkg install
 pio check
+pio test || true
