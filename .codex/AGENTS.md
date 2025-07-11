@@ -31,6 +31,14 @@ root directory of the project:
 pio run -e fly_buffer_f072c8
 ```
 
+You must ensure that unit tests run and pass. You can do this by running the following command:
+
+```bash
+pio test -e native
+```
+
+Adding `-vvv` gets you more verbose output, which can be useful for debugging.
+
 Finally, you should run `clang-tidy` to check for any code quality issues and fix any warnings unless it really doesn't
 make sense. You can do this by running the following command in the root directory of the project:
 
