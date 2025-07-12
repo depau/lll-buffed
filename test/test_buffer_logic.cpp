@@ -4,7 +4,7 @@
 
 #include "buffer.h"
 
-class FakeHardware : public BufferHardware {
+class FakeHardware : public BufferHardware<FakeHardware> {
 public:
   bool opt1{ false };
   bool opt2{ false };
@@ -26,38 +26,38 @@ public:
   uint32_t now{ 0 };
   std::vector<char> input;
 
-  bool optical1() override { return opt1; }
-  bool optical2() override { return opt2; }
-  bool optical3() override { return opt3; }
-  bool filamentPresent() override { return presence; }
-  bool buttonForward() override { return btnF; }
-  bool buttonBackward() override { return btnB; }
-  void setErrorLed(bool on) override { errorLed = on; }
-  void setPresenceLed(bool on) override { presLed = on; }
-  void setPresenceOutput(bool on) override { presOut = on; }
-  void stepperPush(float) override { lastMotor = TestMotor::Push; }
-  void stepperRetract(float) override { lastMotor = TestMotor::Retract; }
-  void stepperHold() override { lastMotor = TestMotor::Hold; }
-  void stepperOff() override { lastMotor = TestMotor::Off; }
-  void writeLine(const std::string &l) override { lines.push_back(l); }
-  bool readChar(char &c) override {
+  void initHardwareImpl() {}
+
+  bool optical1Impl() { return opt1; }
+  bool optical2Impl() { return opt2; }
+  bool optical3Impl() { return opt3; }
+  bool filamentPresentImpl() { return presence; }
+  bool buttonForwardImpl() { return btnF; }
+  bool buttonBackwardImpl() { return btnB; }
+  void setErrorLedImpl(bool on) { errorLed = on; }
+  void setPresenceLedImpl(bool on) { presLed = on; }
+  void setPresenceOutputImpl(bool on) { presOut = on; }
+  void stepperPushImpl(float) { lastMotor = TestMotor::Push; }
+  void stepperRetractImpl(float) { lastMotor = TestMotor::Retract; }
+  void stepperHoldImpl() { lastMotor = TestMotor::Hold; }
+  void stepperOffImpl() { lastMotor = TestMotor::Off; }
+  void writeLineImpl(const std::string &l) { lines.push_back(l); }
+  bool readCharImpl(char &c) {
     if (input.empty())
       return false;
     c = input.front();
     input.erase(input.begin());
     return true;
   }
-  uint32_t timeMs() override { return now; }
+  uint32_t timeMsImpl() { return now; }
 
-  void serialSend(const std::string &line) {
-    input.insert(input.end(), line.begin(), line.end());
-  }
+  void serialSend(const std::string &line) { input.insert(input.end(), line.begin(), line.end()); }
 };
 
 TEST(BufferLogic, StartupWithoutFilament) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = false;
-  Buffer buf(hw);
   buf.init();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
   EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
@@ -66,10 +66,10 @@ TEST(BufferLogic, StartupWithoutFilament) {
 }
 
 TEST(BufferLogic, StartupWithFilament) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
   hw.opt2 = true;
-  Buffer buf(hw);
   buf.init();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
   EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
@@ -78,10 +78,10 @@ TEST(BufferLogic, StartupWithFilament) {
 }
 
 TEST(BufferLogic, ButtonManualMove) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
   hw.opt2 = true;
-  Buffer buf(hw);
   buf.init();
   hw.btnF = true;
   buf.loop();
@@ -96,10 +96,10 @@ TEST(BufferLogic, ButtonManualMove) {
 }
 
 TEST(BufferLogic, SerialMoveCommand) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
   hw.opt2 = true;
-  Buffer buf(hw);
   buf.init();
   hw.serialSend("move 2\n");
   buf.loop();
@@ -123,10 +123,10 @@ TEST(BufferLogic, SerialMoveCommand) {
 }
 
 TEST(BufferLogic, ReactToOpticalSensors) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
   hw.opt2 = true;
-  Buffer buf(hw);
   buf.init();
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
@@ -180,9 +180,9 @@ TEST(BufferLogic, ReactToOpticalSensors) {
 }
 
 TEST(BufferLogic, ContinuousMode) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = false;
-  Buffer buf(hw);
   buf.init();
   hw.serialSend("set_timeout 2000\r\r\r\n");
   hw.serialSend("set_multi_press_count 3\r\n");
@@ -277,13 +277,13 @@ TEST(BufferLogic, ContinuousMode) {
 }
 
 TEST(BufferLogic, ManualStopAndHoldTimeout) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
   hw.opt1 = false;
   hw.opt2 = true;
   hw.opt3 = false;
 
-  Buffer buf(hw);
   buf.init();
   hw.serialSend("set_hold_timeout 5000\n");
   hw.serialSend("enable_hold_timeout\n");
@@ -333,9 +333,9 @@ TEST(BufferLogic, ManualStopAndHoldTimeout) {
 }
 
 TEST(BufferLogic, PresenceReporting) {
-  FakeHardware hw;
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
   hw.presence = true;
-  Buffer buf(hw);
   buf.init();
   buf.loop();
   EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {

@@ -1,35 +1,23 @@
 #pragma once
 
+#include <cmath>
 #include <cstdint>
 #include <string>
 
-/** Hardware abstraction for the filament buffer */
-class BufferHardware {
-public:
-  virtual ~BufferHardware() = default;
-  virtual bool optical1() = 0; ///< sensor near the spool
-  virtual bool optical2() = 0; ///< middle sensor
-  virtual bool optical3() = 0; ///< sensor near the extruder
-  virtual bool filamentPresent() = 0; ///< true if filament detected
-  virtual bool buttonForward() = 0; ///< forward jog button pressed
-  virtual bool buttonBackward() = 0; ///< backward jog button pressed
-  virtual void setErrorLed(bool on) = 0; ///< control error LED
-  virtual void setPresenceLed(bool on) = 0; ///< control presence LED
-  virtual void setPresenceOutput(bool on) = 0; ///< signal filament presence
-  virtual void stepperPush(float speed) = 0; ///< run stepper forward
-  virtual void stepperRetract(float speed) = 0; ///< run stepper backward
-  virtual void stepperHold() = 0; ///< enable driver holding torque
-  virtual void stepperOff() = 0; ///< disable driver
-  virtual void writeLine(const std::string &l) = 0; ///< send status line
-  virtual bool readChar(char &c) = 0; ///< read a byte from serial if available
-  virtual uint32_t timeMs() = 0; ///< milliseconds counter
-  virtual void initHardware() {}
-};
+#include "buffer_hardware.h"
 
-/** High level buffer controller */
+constexpr uint32_t CMD_TIMEOUT = 3000;
+constexpr uint32_t SHORT_PRESS_MS = 150;
+constexpr uint32_t MULTI_PRESS_MIN_MS = 50;
+constexpr uint32_t MULTI_PRESS_MAX_MS = 500;
+
+template<class HW>
 class Buffer {
 public:
-  explicit Buffer(BufferHardware &h);
+  Buffer();
+#ifdef UNIT_TEST
+  HW &getHardware() { return hw; }
+#endif
   void init();
   void loop();
 
@@ -65,7 +53,7 @@ private:
   void updateStatus(bool force = false);
   void setMotor(Motor m);
 
-  BufferHardware &hw;
+  HW hw;
   Mode mode{ Mode::Regular };
   Motor motor{ Motor::Off };
 
@@ -101,3 +89,5 @@ private:
 void buffer_init();
 void buffer_loop();
 #endif
+
+#include "buffer.tpp"
