@@ -231,59 +231,59 @@ void Buffer::handleCommand(const std::string &cmd) {
   updateStatus();
 }
 
+void Buffer::doHandleButton(bool pressed, Motor dir, ButtonState &s, uint32_t now) {
+  if (pressed) {
+    if (!s.pressed) {
+      s.pressed = true;
+      s.pressStart = now;
+      mode = Mode::Manual;
+      setMotor(dir);
+    }
+    return;
+  }
+  if (!s.pressed) {
+    return;
+  }
+  const uint32_t dur = now - s.pressStart;
+  s.pressed = false;
+  if (dur <= SHORT_PRESS_MS) {
+    if (now - s.lastRelease >= MULTI_PRESS_MIN_MS && now - s.lastRelease <= MULTI_PRESS_MAX_MS) {
+      s.count++;
+    } else {
+      s.count = 1;
+    }
+    s.lastRelease = now;
+    if (s.count >= multiPressCount) {
+      mode = Mode::Continuous;
+      continuousStart = now;
+      setMotor(dir);
+      s.count = 0;
+      return;
+    }
+    holdTimeoutEnabled = false;
+    if (hw.filamentPresent()) {
+      mode = Mode::Hold;
+      setMotor(Motor::Hold);
+    } else {
+      mode = Mode::Regular;
+      setMotor(Motor::Off);
+    }
+  } else { // long press
+    s.count = 0;
+    if (hw.filamentPresent()) {
+      mode = Mode::Regular;
+      setMotor(Motor::Hold);
+    } else {
+      mode = Mode::Regular;
+      setMotor(Motor::Off);
+    }
+  }
+}
+
 void Buffer::handleButtons() {
   const uint32_t now = hw.timeMs();
-  auto handle = [&](bool pressed, Motor dir, ButtonState &s) {
-    if (pressed) {
-      if (!s.pressed) {
-        s.pressed = true;
-        s.pressStart = now;
-        mode = Mode::Manual;
-        setMotor(dir);
-      }
-      return;
-    }
-    if (!s.pressed) {
-      return;
-    }
-    const uint32_t dur = now - s.pressStart;
-    s.pressed = false;
-    if (dur <= SHORT_PRESS_MS) {
-      if (now - s.lastRelease >= MULTI_PRESS_MIN_MS && now - s.lastRelease <= MULTI_PRESS_MAX_MS) {
-        s.count++;
-      } else {
-        s.count = 1;
-      }
-      s.lastRelease = now;
-      if (s.count >= multiPressCount) {
-        mode = Mode::Continuous;
-        continuousStart = now;
-        setMotor(dir);
-        s.count = 0;
-        return;
-      }
-      holdTimeoutEnabled = false;
-      if (hw.filamentPresent()) {
-        mode = Mode::Hold;
-        setMotor(Motor::Hold);
-      } else {
-        mode = Mode::Regular;
-        setMotor(Motor::Off);
-      }
-    } else { // long press
-      s.count = 0;
-      if (hw.filamentPresent()) {
-        mode = Mode::Regular;
-        setMotor(Motor::Hold);
-      } else {
-        mode = Mode::Regular;
-        setMotor(Motor::Off);
-      }
-    }
-  };
-
-  handle(hw.buttonForward(), Motor::Push, btnFwd);
-  handle(hw.buttonBackward(), Motor::Retract, btnBack);
+  doHandleButton(hw.buttonForward(), Motor::Push, btnFwd, now);
+  doHandleButton(hw.buttonBackward(), Motor::Retract, btnBack, now);
 }
 
 void Buffer::handleRegular() {

@@ -56,6 +56,7 @@ private:
 
   void processSerial();
   void handleCommand(const std::string &cmd);
+  void doHandleButton(bool pressed, Motor dir, ButtonState &s, uint32_t now);
   void handleButtons();
   void handleRegular();
   void handleSerialMove();
