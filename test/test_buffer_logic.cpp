@@ -186,6 +186,7 @@ TEST(BufferLogic, ContinuousMode) {
   Buffer buf(hw);
   buf.init();
   hw.serialSend("set_timeout 2000\n");
+  buf.loop();
   hw.serialSend("set_multi_press_count 3\n");
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
