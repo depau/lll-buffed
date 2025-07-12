@@ -132,6 +132,7 @@ private:
       cmdBuf.clear();
     }
   }
+
   void handleCommand(const std::string &cmd) {
     if (cmd == "push" || cmd == "p") {
       mode = Mode::Continuous;
@@ -180,6 +181,7 @@ private:
     }
     updateStatus();
   }
+
   void doHandleButton(bool pressed, Motor dir, ButtonState &s, uint32_t now) {
     if (pressed) {
       if (!s.pressed) {
@@ -277,6 +279,7 @@ private:
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
     }
   }
+
   void handleContinuous() {
     if (!hw.filamentPresent()) {
       mode = Mode::Regular;
@@ -288,6 +291,7 @@ private:
       setMotor(Motor::Hold);
     }
   }
+
   void updateHoldTimeout() {
     if (!holdTimeoutEnabled || motor != Motor::Hold) {
       return;
@@ -297,6 +301,7 @@ private:
       setMotor(Motor::Off);
     }
   }
+
   void updateStatus(bool force = false) {
     bool fil = hw.filamentPresent();
     if (fil != lastFilament || force) {
