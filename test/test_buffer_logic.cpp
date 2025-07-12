@@ -2,7 +2,7 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-#include "buffer.h"
+#include "buffer_logic.h"
 
 class FakeHardware : public BufferHardware<FakeHardware> {
 public:

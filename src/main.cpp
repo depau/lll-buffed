@@ -1,7 +1,7 @@
 #include <Arduino.h>
 #include <USBSerial.h>
 
-#include "buffer.h"
+#include "buffer_logic.h"
 
 void setup() {
   SerialUSB.begin(115200);
