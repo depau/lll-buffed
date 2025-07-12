@@ -22,7 +22,6 @@ The device behaviour can be described by two state variables:
    - `serial` – move for a fixed distance issued by the host.
    - `hold` – motor enabled but sensor inputs ignored.
    - `manual` – motor controlled directly by a held button.
-   - `off` – motor disabled waiting for filament.
 2. **Motor status**
    - `push` – filament pushed forward.
    - `retract` – filament retracted.
@@ -87,15 +86,15 @@ graph LR
 
 ## Behaviour Summary
 
-- At power on the buffer checks the filament presence switch. If filament is detected the device starts in regular mode with the motor held. Otherwise the motor remains off waiting for filament.
+- At power on the buffer checks the filament presence switch. If filament is detected the device starts in regular mode with the motor held. Otherwise the buffer stays in regular mode with the motor off until filament is loaded.
 - In **regular mode** the stepper moves according to the optical sensors:
   - Sensor 1 triggers a push until sensor 2 is reached.
   - Sensor 3 triggers a retract until sensor 2 is reached.
   - While no sensor is active the current motion continues.
   - If the motor moves for longer than the configured timeout the state switches to **hold**.
-- In **hold** the motor is enabled but sensor inputs are ignored until a new command or a button press.
+- In **hold** the motor is enabled but sensor inputs are ignored until a new command or a button press. If hold timeout is enabled the motor turns off and the device returns to regular mode after the configured delay.
 - In **continuous** the motor moves indefinitely in the requested direction until cancelled or a timeout is reached.
 - In **serial** the motor moves a fixed distance at the configured speed. The move is aborted by any command or a button press.
 - Holding either button moves the filament in the corresponding direction regardless of the filament sensor. Releasing the button stops the motor. Quick repeated presses start a continuous move.
-- When the filament runs out the motor is switched off unless a button is held or a serial move is executing.
+- When the filament runs out the motor is switched off but the buffer stays in regular mode so it will resume once filament is detected again, unless a button is held or a serial move is executing.
 - Status reports are sent through the serial interface in the form `key=value` whenever settings or state change.

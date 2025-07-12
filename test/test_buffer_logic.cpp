@@ -62,7 +62,7 @@ TEST(BufferLogic, StartupWithoutFilament) {
   buf.init();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
   EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
-    return line.find("mode=off") != std::string::npos;
+    return line.find("mode=regular") != std::string::npos;
   }));
 }
 

@@ -126,7 +126,7 @@ Buffer::Buffer(BufferHardware &h) : hw(h) {
 void Buffer::init() {
   hw.initHardware();
   filamentPresent = hw.filamentPresent();
-  mode = filamentPresent ? Mode::Regular : Mode::Off;
+  mode = Mode::Regular;
   lastMode = mode;
   motor = Motor::Off;
   setMotor(filamentPresent ? Motor::Hold : Motor::Off);
@@ -199,7 +199,7 @@ void Buffer::handleCommand(const std::string &cmd) {
     mode = Mode::Regular;
     setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
   } else if (cmd == "off" || cmd == "o") {
-    mode = Mode::Off;
+    mode = Mode::Regular;
     setMotor(Motor::Off);
   } else if (cmd == "query" || cmd == "q") {
     updateStatus(true);
@@ -267,7 +267,7 @@ void Buffer::handleButtons() {
         mode = Mode::Regular;
         setMotor(Motor::Hold);
       } else {
-        mode = Mode::Off;
+        mode = Mode::Regular;
         setMotor(Motor::Off);
       }
     } else { // long press
@@ -276,7 +276,7 @@ void Buffer::handleButtons() {
         mode = Mode::Regular;
         setMotor(Motor::Hold);
       } else {
-        mode = Mode::Off;
+        mode = Mode::Regular;
         setMotor(Motor::Off);
       }
     }
@@ -288,8 +288,10 @@ void Buffer::handleButtons() {
 
 void Buffer::handleRegular() {
   if (!hw.filamentPresent()) {
-    mode = Mode::Off;
+    hw.setPresenceLed(false);
+    hw.setPresenceOutput(false);
     setMotor(Motor::Off);
+    timedOut = false;
     return;
   }
   hw.setPresenceLed(true);
@@ -305,7 +307,10 @@ void Buffer::handleRegular() {
     moveStart = hw.timeMs();
     move = true;
   } else if (hw.optical2()) {
-    setMotor(Motor::Hold);
+    bool newFilament = filamentPresent && !lastFilament;
+    if (motor != Motor::Off || newFilament) {
+      setMotor(Motor::Hold);
+    }
   }
 
   if (motor == Motor::Push || motor == Motor::Retract) {
@@ -321,20 +326,15 @@ void Buffer::handleRegular() {
 
 void Buffer::handleSerialMove() {
   if (hw.timeMs() >= moveEnd) {
-    if (hw.filamentPresent()) {
-      mode = Mode::Regular;
-      setMotor(Motor::Hold);
-    } else {
-      mode = Mode::Off;
-      setMotor(Motor::Off);
-    }
+    mode = Mode::Regular;
+    setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
     return;
   }
 }
 
 void Buffer::handleContinuous() {
   if (!hw.filamentPresent()) {
-    mode = Mode::Off;
+    mode = Mode::Regular;
     setMotor(Motor::Off);
     return;
   }
@@ -348,8 +348,8 @@ void Buffer::updateHoldTimeout() {
   if (!holdTimeoutEnabled || motor != Motor::Hold) {
     return;
   }
-  if (hw.timeMs() - holdStart > holdTimeoutMs) {
-    mode = Mode::Off;
+  if (hw.timeMs() - holdStart >= holdTimeoutMs) {
+    mode = Mode::Regular;
     setMotor(Motor::Off);
   }
 }
@@ -377,9 +377,6 @@ void Buffer::updateStatus(bool force) {
       break;
     case Mode::Manual:
       modeStr = "manual";
-      break;
-    case Mode::Off:
-      modeStr = "off";
       break;
     }
     hw.writeLine(std::string("mode=") + modeStr);
@@ -430,9 +427,6 @@ void Buffer::loop() {
     break;
   case Mode::Manual:
     // motor already set in button handler
-    break;
-  case Mode::Off:
-    setMotor(Motor::Off);
     break;
   }
 

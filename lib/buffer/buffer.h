@@ -39,8 +39,7 @@ private:
     Continuous,
     SerialMove,
     Hold,
-    Manual,
-    Off
+    Manual
   };
   enum class Motor {
     Push,
@@ -66,7 +65,7 @@ private:
   void setMotor(Motor m);
 
   BufferHardware &hw;
-  Mode mode{ Mode::Off };
+  Mode mode{ Mode::Regular };
   Motor motor{ Motor::Off };
 
   uint32_t timeoutMs{ 90000 };
@@ -91,7 +90,7 @@ private:
   uint32_t holdStart{ 0 };
   uint32_t continuousStart{ 0 };
 
-  Mode lastMode{ Mode::Off };
+  Mode lastMode{ Mode::Regular };
   Motor lastMotor{ Motor::Off };
   bool lastFilament{ false };
   bool lastTimedOut{ false };
