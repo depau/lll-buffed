@@ -273,7 +273,7 @@ private:
 
   void handleSerialMove() {
     if (hw.timeMs() >= moveEnd) {
-      mode = Mode::Regular;
+      mode = hw.filamentPresent() ? Mode::Hold : Mode::Regular;
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
     }
   }
