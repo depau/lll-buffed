@@ -264,7 +264,7 @@ void Buffer::handleButtons() {
       }
       holdTimeoutEnabled = false;
       if (hw.filamentPresent()) {
-        mode = Mode::Regular;
+        mode = Mode::Hold;
         setMotor(Motor::Hold);
       } else {
         mode = Mode::Regular;

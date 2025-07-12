@@ -313,14 +313,14 @@ TEST(BufferLogic, ManualStopAndHoldTimeout) {
   hw.opt2 = false;
   hw.now += 1000;
   buf.loop();
-  hw.btnB = true;
   hw.now += 100;
+  hw.btnB = true;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Retract); // Should retract due to button
+  hw.now += 100;
   hw.btnB = false;
-  hw.now += 1000;
   buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Should hold after button release
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Should hold after quick button press
   hw.now += 5000;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Button should have disabled timeout
