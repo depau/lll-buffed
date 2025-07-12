@@ -160,7 +160,7 @@ private:
         float val = std::stof(cmd.substr(pos + 1));
         if (val != 0.0f && speedMmS > 0.0f) {
           moveDir = val > 0 ? Motor::Push : Motor::Retract;
-          const float ms = std::fabs(val) / speedMmS * 1000.0f;
+          const float ms = std::fabs(val) * 1000.0f / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
           mode = Mode::SerialMove;
           setMotor(moveDir);
@@ -199,7 +199,7 @@ private:
     s.pressed = false;
     if (dur <= SHORT_PRESS_MS) {
       if (now - s.lastRelease >= MULTI_PRESS_MIN_MS && now - s.lastRelease <= MULTI_PRESS_MAX_MS) {
-        s.count++;
+        ++s.count;
       } else {
         s.count = 1;
       }
