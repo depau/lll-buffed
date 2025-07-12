@@ -34,10 +34,26 @@ pio run -e fly_buffer_f072c8
 You must ensure that unit tests run and pass. You can do this by running the following command:
 
 ```bash
-pio test -e native
+pio test -e native -vvv
 ```
 
 Adding `-vvv` gets you more verbose output, which can be useful for debugging.
+
+You should ensure the unit tests run without any memory leaks. You can build the tests without running them by adding
+the `--without-testing` flag (no need to rebuild if you just ran the tests before):
+
+```bash
+pio test -e native --without-testing
+```
+
+Then you can use `valgrind` to check for memory leaks:
+
+```bash
+valgrind --leak-check=full --show-leak-kinds=all .pio/build/native/program
+```
+
+`gdb` is installed should you need to debug the tests, but be careful when running it to make sure to quit the gdb
+session or else your shell session will be left in a broken state.
 
 Finally, you should run `clang-tidy` to check for any code quality issues and fix any warnings unless it really doesn't
 make sense. You can do this by running the following command in the root directory of the project:

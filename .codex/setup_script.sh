@@ -10,3 +10,6 @@ export PATH="$HOME/.platformio/penv/bin:$PATH"
 pio pkg install
 pio check
 pio test || true
+
+# Install debugging tools
+sudo apt-get update && sudo apt-get install -y gdb valgrind
