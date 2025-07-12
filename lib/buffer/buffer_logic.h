@@ -36,7 +36,7 @@ class Buffer {
   Motor motor{ Motor::Off };
 
   uint32_t timeoutMs{ 90000 };
-  uint32_t holdTimeoutMs{ 60000 };
+  uint32_t holdTimeoutMs{ 10000 };
   bool holdTimeoutEnabled{ false };
   uint8_t multiPressCount{ 2 };
   float speedMmS{ 30.0f };
