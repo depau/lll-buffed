@@ -62,6 +62,12 @@ class Buffer {
   bool lastFilament{ false };
   bool lastTimedOut{ false };
 
+  uint32_t lastTimeoutMs{ 0 };
+  uint32_t lastHoldTimeoutMs{ 0 };
+  bool lastHoldTimeoutEnabled{ false };
+  uint32_t lastMultiPressCount{ 0 };
+  float lastSpeedMmS{ 0.0f };
+
 public:
   Buffer() = default;
 
@@ -167,17 +173,15 @@ private:
         }
       }
     } else if (cmd.rfind("set_timeout", 0) == 0) {
-      timeoutMs = static_cast<uint32_t>(std::stoul(cmd.substr(11)));
+      timeoutMs = std::stoul(cmd.substr(11));
     } else if (cmd.rfind("set_hold_timeout", 0) == 0) {
-      holdTimeoutMs = static_cast<uint32_t>(std::stoul(cmd.substr(16)));
+      holdTimeoutMs = std::stoul(cmd.substr(16));
     } else if (cmd.rfind("set_multi_press_count", 0) == 0) {
       multiPressCount = static_cast<uint8_t>(std::stoul(cmd.substr(21)));
     } else if (cmd.rfind("set_speed", 0) == 0) {
       speedMmS = std::stof(cmd.substr(9));
-    } else if (cmd == "enable_hold_timeout") {
-      holdTimeoutEnabled = true;
-    } else if (cmd == "disable_hold_timeout") {
-      holdTimeoutEnabled = false;
+    } else if (cmd == "set_hold_timeout_enabled") {
+      holdTimeoutEnabled = static_cast<bool>(std::stoul(cmd.substr(11)));
     }
     updateStatus();
   }
@@ -352,6 +356,26 @@ private:
     if (timedOut != lastTimedOut || force) {
       hw.writeLine(std::string("timed_out=") + (timedOut ? "1" : "0"));
       lastTimedOut = timedOut;
+    }
+    if (lastTimeoutMs != timeoutMs || force) {
+      hw.writeLine(std::string("timeout_ms=") + std::to_string(timeoutMs));
+      lastTimeoutMs = timeoutMs;
+    }
+    if (lastHoldTimeoutMs != holdTimeoutMs || force) {
+      hw.writeLine(std::string("hold_timeout_ms=") + std::to_string(holdTimeoutMs));
+      lastHoldTimeoutMs = holdTimeoutMs;
+    }
+    if (lastHoldTimeoutEnabled != holdTimeoutEnabled || force) {
+      hw.writeLine(std::string("hold_timeout_enabled=") + (holdTimeoutEnabled ? "1" : "0"));
+      lastHoldTimeoutEnabled = holdTimeoutEnabled;
+    }
+    if (lastMultiPressCount != multiPressCount || force) {
+      hw.writeLine(std::string("multi_press_count=") + std::to_string(multiPressCount));
+      lastMultiPressCount = multiPressCount;
+    }
+    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
+      hw.writeLine(std::string("speed=") + std::to_string(speedMmS));
+      lastSpeedMmS = speedMmS;
     }
   }
 
