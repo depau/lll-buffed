@@ -358,11 +358,11 @@ private:
       lastTimedOut = timedOut;
     }
     if (lastTimeoutMs != timeoutMs || force) {
-      hw.writeLine(std::string("timeout_ms=") + std::to_string(timeoutMs));
+      hw.writeLine(std::string("timeout=") + std::to_string(timeoutMs));
       lastTimeoutMs = timeoutMs;
     }
     if (lastHoldTimeoutMs != holdTimeoutMs || force) {
-      hw.writeLine(std::string("hold_timeout_ms=") + std::to_string(holdTimeoutMs));
+      hw.writeLine(std::string("hold_timeout=") + std::to_string(holdTimeoutMs));
       lastHoldTimeoutMs = holdTimeoutMs;
     }
     if (lastHoldTimeoutEnabled != holdTimeoutEnabled || force) {
