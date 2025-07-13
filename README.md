@@ -21,10 +21,10 @@ official [PlatformIO installation instructions](https://platformio.org/install/c
 
 1. Clone this repository to your local machine:
 
-  ```bash
-  git clone https://github.com/depau/lll-buffed.git
-  cd lll-buffed
-  ```
+    ```bash
+    git clone https://github.com/depau/lll-buffed.git
+    cd lll-buffed
+    ```
 
 2. Unscrew and remove the top cover of the buffer, and connect the device to your computer via USB.
 3. While holding the `B` (boot) button on the buffer, press and release the `R` (reset) button to put the device into
