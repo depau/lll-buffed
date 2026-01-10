@@ -1,7 +1,5 @@
 #pragma once
 
-#include <string>
-
 template<class Derived>
 class BufferHardware {
 public:
@@ -20,7 +18,18 @@ public:
   void stepperRetract(float speed) { static_cast<Derived *>(this)->stepperRetractImpl(speed); }
   void stepperHold() { static_cast<Derived *>(this)->stepperHoldImpl(); }
   void stepperOff() { static_cast<Derived *>(this)->stepperOffImpl(); }
-  void writeLine(const std::string &l) { static_cast<Derived *>(this)->writeLineImpl(l); }
   bool readChar(char &c) { return static_cast<Derived *>(this)->readCharImpl(c); }
   uint32_t timeMs() { return static_cast<Derived *>(this)->timeMsImpl(); }
+  void writeLine(const char *l) { static_cast<Derived *>(this)->writeLineImpl(l); }
+
+  template<size_t BufSize = 64>
+  [[gnu::format(printf, 2, 3)]]
+  void writeLineF(const char *fmt, ...) {
+    char buf[BufSize + 1];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, BufSize, fmt, args);
+    va_end(args);
+    writeLine(buf);
+  }
 };

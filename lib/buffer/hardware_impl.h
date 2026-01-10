@@ -74,9 +74,9 @@ public:
     digitalWrite(STEPPER_EN, HIGH);
     driver.VACTUAL(0);
   }
-  static void writeLineImpl(const std::string &l) {
-    SerialUSB.println(l.c_str());
-    Serial2.println(l.c_str());
+  static void writeLineImpl(const char *l) {
+    SerialUSB.println(l);
+    Serial2.println(l);
   }
   static bool readCharImpl(char &c) {
     if (SerialUSB.available()) {

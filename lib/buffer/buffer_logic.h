@@ -2,7 +2,7 @@
 
 #include <cmath>
 #include <cstdint>
-#include <string>
+#include <cstring>
 
 constexpr uint32_t CMD_TIMEOUT = 3000;
 constexpr uint32_t SHORT_PRESS_MS = 150;
@@ -47,7 +47,8 @@ class Buffer {
   ButtonState btnFwd;
   ButtonState btnBack;
 
-  std::string cmdBuf;
+  char cmdBuf[64];
+  size_t cmdLen{ 0 };
   uint32_t lastCharTime{ 0 };
 
   uint32_t moveEnd{ 0 };
@@ -123,47 +124,49 @@ private:
       }
       lastCharTime = hw.timeMs();
       if (c == '\n') {
-        std::string cmd = cmdBuf;
-        cmdBuf.clear();
-        if (!cmd.empty()) {
-          handleCommand(cmd);
+        if (cmdLen > 0) {
+          cmdBuf[cmdLen] = '\0';
+          handleCommand(cmdBuf);
+          cmdLen = 0;
         }
       } else {
-        if (cmdBuf.size() < 64) {
-          cmdBuf += c;
+        if (cmdLen < sizeof(cmdBuf) - 1) {
+          cmdBuf[cmdLen++] = c;
         }
       }
     }
-    if (!cmdBuf.empty() && hw.timeMs() - lastCharTime > CMD_TIMEOUT) {
-      cmdBuf.clear();
+    if (cmdLen > 0 && hw.timeMs() - lastCharTime > CMD_TIMEOUT) {
+      cmdLen = 0;
     }
   }
 
-  void handleCommand(const std::string &cmd) {
-    if (cmd == "push" || cmd == "p") {
+  bool startsWith(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
+
+  void handleCommand(const char *cmd) {
+    if (strcmp(cmd, "push") == 0 || strcmp(cmd, "p") == 0) {
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Push);
-    } else if (cmd == "retract" || cmd == "r") {
+    } else if (strcmp(cmd, "retract") == 0 || strcmp(cmd, "r") == 0) {
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Retract);
-    } else if (cmd == "hold" || cmd == "h") {
+    } else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "h") == 0) {
       holdTimeoutEnabled = false;
       mode = Mode::Hold;
       setMotor(Motor::Hold);
-    } else if (cmd == "regular" || cmd == "n") {
+    } else if (strcmp(cmd, "regular") == 0 || strcmp(cmd, "n") == 0) {
       mode = Mode::Regular;
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
-    } else if (cmd == "off" || cmd == "o") {
+    } else if (strcmp(cmd, "off") == 0 || strcmp(cmd, "o") == 0) {
       mode = Mode::Regular;
       setMotor(Motor::Off);
-    } else if (cmd == "query" || cmd == "q") {
+    } else if (strcmp(cmd, "query") == 0 || strcmp(cmd, "q") == 0) {
       updateStatus(true);
-    } else if (cmd.rfind("move", 0) == 0 || cmd.rfind("m ", 0) == 0) {
-      size_t pos = cmd.find(' ');
-      if (pos != std::string::npos) {
-        float val = std::stof(cmd.substr(pos + 1));
+    } else if (startsWith(cmd, "move") || startsWith(cmd, "m ")) {
+      const char *space = strchr(cmd, ' ');
+      if (space) {
+        float val = strtof(space + 1, nullptr);
         if (val != 0.0f && speedMmS > 0.0f) {
           moveDir = val > 0 ? Motor::Push : Motor::Retract;
           const float ms = std::fabs(val) * 1000.0f / speedMmS;
@@ -172,16 +175,18 @@ private:
           setMotor(moveDir);
         }
       }
-    } else if (cmd.rfind("set_timeout", 0) == 0) {
-      timeoutMs = std::stoul(cmd.substr(11));
-    } else if (cmd.rfind("set_hold_timeout", 0) == 0) {
-      holdTimeoutMs = std::stoul(cmd.substr(16));
-    } else if (cmd.rfind("set_multi_press_count", 0) == 0) {
-      multiPressCount = static_cast<uint8_t>(std::stoul(cmd.substr(21)));
-    } else if (cmd.rfind("set_speed", 0) == 0) {
-      speedMmS = std::stof(cmd.substr(9));
-    } else if (cmd == "set_hold_timeout_enabled") {
-      holdTimeoutEnabled = static_cast<bool>(std::stoul(cmd.substr(11)));
+    } else if (startsWith(cmd, "set_timeout")) {
+      timeoutMs = strtoul(cmd + 11, nullptr, 10);
+    } else if (startsWith(cmd, "set_hold_timeout")) {
+      if (startsWith(cmd, "set_hold_timeout_enabled")) {
+        holdTimeoutEnabled = static_cast<bool>(strtoul(cmd + 24, nullptr, 10));
+      } else {
+        holdTimeoutMs = strtoul(cmd + 16, nullptr, 10);
+      }
+    } else if (startsWith(cmd, "set_multi_press_count")) {
+      multiPressCount = static_cast<uint8_t>(strtoul(cmd + 21, nullptr, 10));
+    } else if (startsWith(cmd, "set_speed")) {
+      speedMmS = strtof(cmd + 9, nullptr);
     }
     updateStatus();
   }
@@ -307,9 +312,8 @@ private:
   }
 
   void updateStatus(bool force = false) {
-    bool fil = hw.filamentPresent();
-    if (fil != lastFilament || force) {
-      hw.writeLine(std::string("filament_present=") + (fil ? "1" : "0"));
+    if (const bool fil = hw.filamentPresent(); fil != lastFilament || force) {
+      hw.writeLineF("filament_present=%d", fil ? 1 : 0);
       lastFilament = fil;
     }
     if (mode != lastMode || force) {
@@ -331,7 +335,7 @@ private:
         modeStr = "manual";
         break;
       }
-      hw.writeLine(std::string("mode=") + modeStr);
+      hw.writeLineF("mode=%s", modeStr);
       lastMode = mode;
     }
     if (motor != lastMotor || force) {
@@ -350,31 +354,36 @@ private:
         statusStr = "off";
         break;
       }
-      hw.writeLine(std::string("status=") + statusStr);
+      hw.writeLineF("status=%s", statusStr);
       lastMotor = motor;
     }
     if (timedOut != lastTimedOut || force) {
-      hw.writeLine(std::string("timed_out=") + (timedOut ? "1" : "0"));
+      hw.writeLineF("timed_out=%d", timedOut ? 1 : 0);
       lastTimedOut = timedOut;
     }
     if (lastTimeoutMs != timeoutMs || force) {
-      hw.writeLine(std::string("timeout=") + std::to_string(timeoutMs));
+      hw.writeLineF("timeout=%lu", timeoutMs);
       lastTimeoutMs = timeoutMs;
     }
     if (lastHoldTimeoutMs != holdTimeoutMs || force) {
-      hw.writeLine(std::string("hold_timeout=") + std::to_string(holdTimeoutMs));
+      hw.writeLineF("hold_timeout=%lu", holdTimeoutMs);
       lastHoldTimeoutMs = holdTimeoutMs;
     }
     if (lastHoldTimeoutEnabled != holdTimeoutEnabled || force) {
-      hw.writeLine(std::string("hold_timeout_enabled=") + (holdTimeoutEnabled ? "1" : "0"));
+      hw.writeLineF("hold_timeout_enabled=%d", holdTimeoutEnabled ? 1 : 0);
       lastHoldTimeoutEnabled = holdTimeoutEnabled;
     }
     if (lastMultiPressCount != multiPressCount || force) {
-      hw.writeLine(std::string("multi_press_count=") + std::to_string(multiPressCount));
+      hw.writeLineF("multi_press_count=%u", multiPressCount);
       lastMultiPressCount = multiPressCount;
     }
     if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
-      hw.writeLine(std::string("speed=") + std::to_string(speedMmS));
+      int intPart = static_cast<int>(speedMmS);
+      int fracPart = static_cast<int>((speedMmS - intPart) * 100);
+      if (fracPart < 0) {
+        fracPart = -fracPart;
+      }
+      hw.writeLineF("speed=%d.%02d", intPart, fracPart);
       lastSpeedMmS = speedMmS;
     }
   }
