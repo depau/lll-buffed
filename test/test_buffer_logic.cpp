@@ -237,7 +237,7 @@ TEST(BufferLogic, ManualStopAndHoldTimeout) {
 
   buf.init();
   hw.serialSend("set_hold_timeout 5000\n");
-  hw.serialSend("enable_hold_timeout\n");
+  hw.serialSend("set_hold_timeout_enabled 1\n");
   buf.loop();
 
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Should start in hold mode
