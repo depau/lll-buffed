@@ -47,7 +47,7 @@ class Buffer {
   ButtonState btnFwd;
   ButtonState btnBack;
 
-  char cmdBuf[64];
+  char cmdBuf[64]{};
   size_t cmdLen{ 0 };
   uint32_t lastCharTime{ 0 };
 
@@ -140,7 +140,7 @@ private:
     }
   }
 
-  bool startsWith(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
+  static bool startsWith(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
 
   void handleCommand(const char *cmd) {
     if (strcmp(cmd, "push") == 0 || strcmp(cmd, "p") == 0) {
@@ -164,10 +164,8 @@ private:
     } else if (strcmp(cmd, "query") == 0 || strcmp(cmd, "q") == 0) {
       updateStatus(true);
     } else if (startsWith(cmd, "move") || startsWith(cmd, "m ")) {
-      const char *space = strchr(cmd, ' ');
-      if (space) {
-        float val = strtof(space + 1, nullptr);
-        if (val != 0.0f && speedMmS > 0.0f) {
+      if (const char *space = strchr(cmd, ' ')) {
+        if (const float val = strtof(space + 1, nullptr); val != 0.0f && speedMmS > 0.0f) {
           moveDir = val > 0 ? Motor::Push : Motor::Retract;
           const float ms = std::fabs(val) * 1000.0f / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
@@ -317,7 +315,7 @@ private:
       lastFilament = fil;
     }
     if (mode != lastMode || force) {
-      const char *modeStr = "";
+      auto modeStr = "";
       switch (mode) {
       case Mode::Regular:
         modeStr = "regular";
@@ -339,7 +337,7 @@ private:
       lastMode = mode;
     }
     if (motor != lastMotor || force) {
-      const char *statusStr = "";
+      auto statusStr = "";
       switch (motor) {
       case Motor::Push:
         statusStr = "push";
@@ -378,12 +376,7 @@ private:
       lastMultiPressCount = multiPressCount;
     }
     if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
-      int intPart = static_cast<int>(speedMmS);
-      int fracPart = static_cast<int>((speedMmS - intPart) * 100);
-      if (fracPart < 0) {
-        fracPart = -fracPart;
-      }
-      hw.writeLineF("speed=%d.%02d", intPart, fracPart);
+      hw.writeLineF("speed=%.2f", speedMmS);
       lastSpeedMmS = speedMmS;
     }
   }

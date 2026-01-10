@@ -2,8 +2,8 @@
 
 #include <Arduino.h>
 #include <TMCStepper.h>
-
-#include "hardware_iface.h"
+#include <cstdarg>
+#include <cstdio>
 
 inline constexpr uint32_t OPTICAL_SENSOR_1 = PB4;
 inline constexpr uint32_t OPTICAL_SENSOR_2 = PB3;
@@ -25,11 +25,11 @@ constexpr float SPEED_RPM_FACTOR = 9.1463414634f;
 constexpr float STEPS_PER_REV = 200.0f;
 constexpr float SCREW_PITCH = 0.715f;
 
-class BoardHardware : public BufferHardware<BoardHardware> {
+class BufferHardware {
   TMC2209Stepper driver{ STEPPER_UART, STEPPER_UART, STEPPER_R_SENSE, STEPPER_ADDR };
 
 public:
-  void initHardwareImpl() {
+  void initHardware() {
     pinMode(OPTICAL_SENSOR_1, INPUT);
     pinMode(OPTICAL_SENSOR_2, INPUT);
     pinMode(OPTICAL_SENSOR_3, INPUT);
@@ -55,30 +55,46 @@ public:
     driver.pwm_autoscale(true);
   }
 
-  static bool optical1Impl() { return digitalRead(OPTICAL_SENSOR_1) != 0; }
-  static bool optical2Impl() { return digitalRead(OPTICAL_SENSOR_2) != 0; }
-  static bool optical3Impl() { return digitalRead(OPTICAL_SENSOR_3) != 0; }
-  static bool filamentPresentImpl() { return digitalRead(PRESENCE_SWITCH) == 0; }
-  static bool buttonForwardImpl() { return digitalRead(BTN_FORWARD) == LOW; }
-  static bool buttonBackwardImpl() { return digitalRead(BTN_BACKWARD) == LOW; }
-  static void setErrorLedImpl(bool on) { digitalWrite(ERROR_LED, on ? HIGH : LOW); }
-  static void setPresenceLedImpl(bool on) { digitalWrite(PRESENCE_LED, on ? HIGH : LOW); }
-  static void setPresenceOutputImpl(bool on) { digitalWrite(PRESENCE_OUTPUT, on ? HIGH : LOW); }
-  void stepperPushImpl(float speed) { runStepper(true, speed); }
-  void stepperRetractImpl(float speed) { runStepper(false, speed); }
-  void stepperHoldImpl() {
+  static bool optical1() { return digitalRead(OPTICAL_SENSOR_1) != 0; }
+  static bool optical2() { return digitalRead(OPTICAL_SENSOR_2) != 0; }
+  static bool optical3() { return digitalRead(OPTICAL_SENSOR_3) != 0; }
+  static bool filamentPresent() { return digitalRead(PRESENCE_SWITCH) == 0; }
+  static bool buttonForward() { return digitalRead(BTN_FORWARD) == LOW; }
+  static bool buttonBackward() { return digitalRead(BTN_BACKWARD) == LOW; }
+  static void setErrorLed(const bool on) { digitalWrite(ERROR_LED, on ? HIGH : LOW); }
+  static void setPresenceLed(const bool on) { digitalWrite(PRESENCE_LED, on ? HIGH : LOW); }
+  static void setPresenceOutput(const bool on) { digitalWrite(PRESENCE_OUTPUT, on ? HIGH : LOW); }
+
+  void stepperPush(const float speed) { runStepper(true, speed); }
+  void stepperRetract(const float speed) { runStepper(false, speed); }
+
+  void stepperHold() {
     digitalWrite(STEPPER_EN, LOW);
     driver.VACTUAL(0);
   }
-  void stepperOffImpl() {
+
+  void stepperOff() {
     digitalWrite(STEPPER_EN, HIGH);
     driver.VACTUAL(0);
   }
-  static void writeLineImpl(const char *l) {
+
+  static void writeLine(const char *l) {
     SerialUSB.println(l);
     Serial2.println(l);
   }
-  static bool readCharImpl(char &c) {
+
+  template<size_t BufSize = 64>
+  [[gnu::format(printf, 1, 2)]]
+  static void writeLineF(const char *fmt, ...) {
+    char buf[BufSize + 1];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, BufSize, fmt, args);
+    va_end(args);
+    writeLine(buf);
+  }
+
+  static bool readChar(char &c) {
     if (SerialUSB.available()) {
       c = static_cast<char>(SerialUSB.read());
       return true;
@@ -89,10 +105,11 @@ public:
     }
     return false;
   }
-  static uint32_t timeMsImpl() { return millis(); }
+
+  static uint32_t timeMs() { return millis(); }
 
 private:
-  void runStepper(bool forward, float speed) {
+  void runStepper(const bool forward, const float speed) {
     digitalWrite(STEPPER_EN, LOW);
     driver.shaft(forward);
     const float rpm = speed * SPEED_RPM_FACTOR;
