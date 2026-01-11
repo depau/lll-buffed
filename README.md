@@ -42,6 +42,11 @@ few tries to get the technique right.
 
 ### Serial Commands
 
+The buffer can be controlled via serial commands sent over the UART interface.
+
+The protocol is enabled via `ENABLE_UART_PROTOCOL` in `platformio.ini`. TX is on `PA2`, RX is on `PA3`. The baud rate
+is 115200.
+
 Most commands have short aliases for convenience. The commands are:
 
 - `push` (`p`): Push the filament forward (continuous run mode).

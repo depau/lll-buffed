@@ -22,7 +22,7 @@ class Buffer {
   enum class Mode {
     Regular,
     Continuous,
-    SerialMove,
+    MoveCommand,
     Hold,
     Manual
   };
@@ -94,7 +94,9 @@ public:
   }
 
   void loop() {
-    processSerial();
+#ifdef ENABLE_UART_PROTOCOL
+    processUartCommands();
+#endif
     filamentPresent = hw.filamentPresent();
     handleButtons();
 
@@ -102,8 +104,8 @@ public:
     case Mode::Regular:
       handleRegular();
       break;
-    case Mode::SerialMove:
-      handleSerialMove();
+    case Mode::MoveCommand:
+      handleMoveCommand();
       break;
     case Mode::Continuous:
       handleContinuous();
@@ -124,7 +126,8 @@ public:
 #endif
 
 private:
-  void processSerial() {
+#ifdef ENABLE_UART_PROTOCOL
+  void processUartCommands() {
     char c;
     while (hw.readChar(c)) {
       if (c == '\r') {
@@ -143,7 +146,7 @@ private:
             }
           }
 
-          handleCommand(cmdBuf);
+          handleUartCommand(cmdBuf);
           cmdLen = 0;
         }
       } else {
@@ -159,7 +162,7 @@ private:
 
   static bool startsWith(const char *str, const char *prefix) { return strncmp(str, prefix, strlen(prefix)) == 0; }
 
-  void handleCommand(const char *cmd) {
+  void handleUartCommand(const char *cmd) {
     if (strcmp(cmd, "push") == 0 || strcmp(cmd, "p") == 0) {
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
@@ -186,7 +189,7 @@ private:
           moveDir = val > 0 ? Motor::Push : Motor::Retract;
           const float ms = std::fabs(val) * 1000.0f / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
-          mode = Mode::SerialMove;
+          mode = Mode::MoveCommand;
           setMotor(moveDir);
         }
       }
@@ -205,6 +208,7 @@ private:
     }
     updateStatus();
   }
+#endif
 
   void doHandleButton(bool pressed, Motor dir, ButtonState &s, uint32_t now) {
     if (pressed) {
@@ -297,7 +301,7 @@ private:
     }
   }
 
-  void handleSerialMove() {
+  void handleMoveCommand() {
     if (hw.timeMs() >= moveEnd) {
       mode = hw.filamentPresent() ? Mode::Hold : Mode::Regular;
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
@@ -327,6 +331,7 @@ private:
   }
 
   void updateStatus(bool force = false) {
+#ifdef ENABLE_UART_PROTOCOL
     if (const bool fil = hw.filamentPresent(); fil != lastFilament || force) {
       hw.writeLineF("filament_present=%d", fil ? 1 : 0);
       lastFilament = fil;
@@ -340,8 +345,8 @@ private:
       case Mode::Continuous:
         modeStr = "continuous";
         break;
-      case Mode::SerialMove:
-        modeStr = "serial";
+      case Mode::MoveCommand:
+        modeStr = "move_command";
         break;
       case Mode::Hold:
         modeStr = "hold";
@@ -396,6 +401,7 @@ private:
       hw.writeLineF("speed=%.2f", speedMmS);
       lastSpeedMmS = speedMmS;
     }
+#endif
   }
 
   void setMotor(Motor m) {

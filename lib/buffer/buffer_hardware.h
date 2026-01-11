@@ -30,6 +30,11 @@ class BufferHardware {
 
 public:
   void initHardware() {
+#ifdef ENABLE_UART_PROTOCOL
+    SerialUSB.begin(115200);
+    Serial2.begin(115200);
+#endif
+
     pinMode(OPTICAL_SENSOR_1, INPUT);
     pinMode(OPTICAL_SENSOR_2, INPUT);
     pinMode(OPTICAL_SENSOR_3, INPUT);
@@ -78,6 +83,7 @@ public:
     driver.VACTUAL(0);
   }
 
+#ifdef ENABLE_UART_PROTOCOL
   static void writeLine(const char *l) {
     SerialUSB.println(l);
     Serial2.println(l);
@@ -105,6 +111,7 @@ public:
     }
     return false;
   }
+#endif
 
   static uint32_t timeMs() { return millis(); }
 
