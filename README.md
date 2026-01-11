@@ -86,6 +86,9 @@ following:
 - `multi_press_count=<N>`: The number of button presses required to enter continuous run mode.
 - `speed=<MM/S>`: The current speed of the motor in millimeters per second.
 
+Commands may be prefixed by a single digit representing the buffer ID (0-9) if multiple buffers are connected to the
+same UART TX line. You can change the buffer ID by modifying the `BUFFER_ID` macro in `platformio.ini`.
+
 ### Timeout
 
 In regular mode, the buffer will keep pushing or retracting the filament until the sensors detect that the buffer is

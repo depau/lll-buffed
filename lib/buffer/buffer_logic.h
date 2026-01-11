@@ -4,6 +4,14 @@
 #include <cstdint>
 #include <cstring>
 
+#ifndef BUFFER_ID
+#define BUFFER_ID 0
+#endif
+
+#if BUFFER_ID < 0 || BUFFER_ID > 9
+#error "BUFFER_ID must be between 0 and 9"
+#endif
+
 constexpr uint32_t CMD_TIMEOUT = 3000;
 constexpr uint32_t SHORT_PRESS_MS = 150;
 constexpr uint32_t MULTI_PRESS_MIN_MS = 50;
@@ -126,6 +134,15 @@ private:
       if (c == '\n') {
         if (cmdLen > 0) {
           cmdBuf[cmdLen] = '\0';
+
+          if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9') {
+            // A specific buffer is being addressed: check if it matches ours
+            if (const int bufID = cmdBuf[0] - '0'; bufID != BUFFER_ID) {
+              cmdLen = 0;
+              continue;
+            }
+          }
+
           handleCommand(cmdBuf);
           cmdLen = 0;
         }
