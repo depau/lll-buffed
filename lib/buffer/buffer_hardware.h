@@ -4,6 +4,9 @@
 #include <TMCStepper.h>
 #include <cstdarg>
 #include <cstdio>
+
+#include "tiny_printf.hpp"
+
 #ifdef ENABLE_I2C_PROTOCOL
 #include <Wire.h>
 #endif
@@ -150,7 +153,7 @@ public:
     char buf[BufSize + 1];
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buf, BufSize, fmt, args);
+    tiny_vsnprintf(buf, BufSize, fmt, args);
     va_end(args);
     writeLine(buf);
   }
