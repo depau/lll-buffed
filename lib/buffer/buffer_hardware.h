@@ -4,6 +4,9 @@
 #include <TMCStepper.h>
 #include <cstdarg>
 #include <cstdio>
+#ifdef ENABLE_I2C_PROTOCOL
+#include <Wire.h>
+#endif
 
 inline constexpr uint32_t OPTICAL_SENSOR_1 = PB4;
 inline constexpr uint32_t OPTICAL_SENSOR_2 = PB3;
@@ -24,15 +27,67 @@ inline constexpr int32_t STEPPER_MICROSTEPS = 64;
 constexpr float SPEED_RPM_FACTOR = 9.1463414634f;
 constexpr float STEPS_PER_REV = 200.0f;
 constexpr float SCREW_PITCH = 0.715f;
+#ifdef ENABLE_I2C_PROTOCOL
+inline constexpr uint32_t I2C_INT_PIN = PA5;
+inline constexpr uint32_t I2C_SDA_PIN = PB11;
+inline constexpr uint32_t I2C_SCL_PIN = PB10;
+#endif
 
 class BufferHardware {
   TMC2209Stepper driver{ STEPPER_UART, STEPPER_UART, STEPPER_R_SENSE, STEPPER_ADDR };
+
+#ifdef ENABLE_I2C_PROTOCOL
+  static inline void *i2cContext{ nullptr };
+  static inline void (*i2cRequestCallback)(void *){ nullptr };
+  static inline void (*i2cReceiveCallback)(void *, const uint8_t *, size_t){ nullptr };
+
+  // Buffer to hold incoming I2C data
+  static inline uint8_t i2cRxBuffer[64]{};
+
+  static void onI2CRequest() {
+    if (i2cRequestCallback)
+      i2cRequestCallback(i2cContext);
+  }
+
+  static void onI2CReceive(const int numBytes) {
+    if (numBytes <= 0)
+      return;
+
+    // Read directly into our buffer
+    size_t count = 0;
+    while (Wire.available() && count < sizeof(i2cRxBuffer)) {
+      i2cRxBuffer[count++] = static_cast<uint8_t>(Wire.read());
+    }
+
+    // Drain any excess
+    while (Wire.available())
+      Wire.read();
+
+    if (i2cReceiveCallback && count > 0)
+      i2cReceiveCallback(i2cContext, i2cRxBuffer, count);
+  }
+#endif
 
 public:
   void initHardware() {
 #ifdef ENABLE_UART_PROTOCOL
     SerialUSB.begin(115200);
     Serial2.begin(115200);
+#endif
+#ifdef ENABLE_I2C_PROTOCOL
+    pinMode(I2C_INT_PIN, OUTPUT);
+    digitalWrite(I2C_INT_PIN, HIGH); // Inactive (Open Drain high-z emulation via input mode or explicit OD)
+    // STM32 pinMode OUTPUT is push-pull by default. For Open Drain we need OUTPUT_OPEN_DRAIN if supported,
+    // or emulate valid OD by switching between INPUT (High-Z) and OUTPUT LOW.
+    // Arduino STM32 usually supports OUTPUT_OPEN_DRAIN.
+    pinMode(I2C_INT_PIN, OUTPUT_OPEN_DRAIN);
+    digitalWrite(I2C_INT_PIN, HIGH);
+
+    Wire.setSDA(I2C_SDA_PIN);
+    Wire.setSCL(I2C_SCL_PIN);
+    Wire.begin(I2C_ADDR);
+    Wire.onRequest(onI2CRequest);
+    Wire.onReceive(onI2CReceive);
 #endif
 
     pinMode(OPTICAL_SENSOR_1, INPUT);
@@ -111,6 +166,22 @@ public:
     }
     return false;
   }
+#endif
+
+#ifdef ENABLE_I2C_PROTOCOL
+  static void setI2CRequestCallback(void (*cb)(void *), void *ctx) {
+    i2cRequestCallback = cb;
+    i2cContext = ctx;
+  }
+  static void setI2CReceiveCallback(void (*cb)(void *, const uint8_t *, size_t), void *ctx) {
+    i2cReceiveCallback = cb;
+    i2cContext = ctx;
+  }
+  static void setInterrupt(const bool active) { digitalWrite(I2C_INT_PIN, active ? LOW : HIGH); }
+  // I2C Read/Write wrappers
+  static void i2cWrite(uint8_t data) { Wire.write(data); }
+  static void i2cWriteBuffer(const uint8_t *data, size_t len) { Wire.write(data, len); }
+  // Removed i2cRead and i2cAvailable as they are no longer needed by Logic
 #endif
 
   static uint32_t timeMs() { return millis(); }

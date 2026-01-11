@@ -17,6 +17,29 @@ constexpr uint32_t SHORT_PRESS_MS = 150;
 constexpr uint32_t MULTI_PRESS_MIN_MS = 50;
 constexpr uint32_t MULTI_PRESS_MAX_MS = 500;
 
+#ifdef ENABLE_I2C_PROTOCOL
+enum I2CRegister : uint8_t {
+  REG_COMMAND = 0x00,
+  REG_STATUS = 0x01,
+  REG_MODE = 0x02,
+  REG_MOTOR = 0x03,
+  REG_MOVE_DIST = 0x04,
+  REG_PARAM_SPEED = 0x08,
+  REG_PARAM_TIMEOUT = 0x0C,
+  REG_PARAM_HOLD_TIMEOUT = 0x10,
+  REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x14,
+  REG_PARAM_MULTI_PRESS_COUNT = 0x15,
+};
+
+enum I2CCommand : uint8_t {
+  CMD_OFF = 0,
+  CMD_REGULAR = 1,
+  CMD_HOLD = 2,
+  CMD_PUSH = 3,
+  CMD_RETRACT = 4,
+};
+#endif
+
 template<class HW>
 class Buffer {
   enum class Mode {
@@ -77,6 +100,10 @@ class Buffer {
   uint32_t lastMultiPressCount{ 0 };
   float lastSpeedMmS{ 0.0f };
 
+#ifdef ENABLE_I2C_PROTOCOL
+  uint8_t i2cRegPtr{ 0 };
+#endif
+
 public:
   Buffer() = default;
 
@@ -91,6 +118,11 @@ public:
     hw.setPresenceLed(filamentPresent);
     hw.setPresenceOutput(filamentPresent);
     updateStatus(true);
+
+#ifdef ENABLE_I2C_PROTOCOL
+    hw.setI2CRequestCallback(onI2CRequest, this);
+    hw.setI2CReceiveCallback(onI2CReceive, this);
+#endif
   }
 
   void loop() {
@@ -205,6 +237,175 @@ private:
       multiPressCount = static_cast<uint8_t>(strtoul(cmd + 21, nullptr, 10));
     } else if (startsWith(cmd, "set_speed")) {
       speedMmS = strtof(cmd + 9, nullptr);
+    }
+    updateStatus();
+  }
+#endif
+
+#ifdef ENABLE_I2C_PROTOCOL
+  static void onI2CRequest(void *ctx) {
+    if (auto *self = static_cast<Buffer *>(ctx)) {
+      self->handleI2CRequest();
+    }
+  }
+
+  static void onI2CReceive(void *ctx, const uint8_t *data, size_t size) {
+    if (auto *self = static_cast<Buffer *>(ctx)) {
+      self->handleI2CReceive(data, size);
+    }
+  }
+
+  void handleI2CRequest() {
+    // If status was read, we can clear the interrupt if it was due to status change
+    if (i2cRegPtr == REG_STATUS) {
+      hw.setInterrupt(false);
+    }
+
+    switch (i2cRegPtr) {
+    case REG_STATUS: {
+      uint8_t status = 0;
+      if (filamentPresent)
+        status |= 0x01;
+      if (timedOut)
+        status |= 0x02;
+      if (holdTimeoutEnabled)
+        status |= 0x04;
+      hw.i2cWrite(status);
+      break;
+    }
+    case REG_MODE:
+      hw.i2cWrite(static_cast<uint8_t>(mode));
+      break;
+    case REG_MOTOR:
+      hw.i2cWrite(static_cast<uint8_t>(motor));
+      break;
+    case REG_PARAM_SPEED:
+      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&speedMmS), sizeof(speedMmS));
+      break;
+    case REG_PARAM_TIMEOUT:
+      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&timeoutMs), sizeof(timeoutMs));
+      break;
+    case REG_PARAM_HOLD_TIMEOUT:
+      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&holdTimeoutMs), sizeof(holdTimeoutMs));
+      break;
+    case REG_PARAM_HOLD_TIMEOUT_ENABLED:
+      hw.i2cWrite(holdTimeoutEnabled ? 1 : 0);
+      break;
+    case REG_PARAM_MULTI_PRESS_COUNT:
+      hw.i2cWrite(multiPressCount);
+      break;
+    default:
+      hw.i2cWrite(0);
+      break;
+    }
+  }
+
+  void handleI2CReceive(const uint8_t *data, size_t size) {
+    if (size < 1)
+      return;
+
+    size_t idx = 0;
+
+    // First byte is register pointer
+    if (idx < size) {
+      i2cRegPtr = data[idx++];
+      size--;
+    }
+
+    if (size == 0)
+      return; // Just setting pointer
+
+    // Writing to register
+    switch (i2cRegPtr) {
+    case REG_COMMAND:
+      if (size >= 1 && idx < size + idx) {
+        const uint8_t cmd = data[idx++];
+        handleI2CCommand(cmd);
+      }
+      break;
+    case REG_MOVE_DIST:
+      if (size >= 4 && idx + 4 <= size + idx) {
+        float dist;
+        memcpy(&dist, &data[idx], 4);
+        idx += 4;
+
+        if (dist != 0.0f && speedMmS > 0.0f) {
+          moveDir = dist > 0 ? Motor::Push : Motor::Retract;
+          const float ms = std::fabs(dist) * 1000.0f / speedMmS;
+          moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
+          mode = Mode::MoveCommand;
+          setMotor(moveDir);
+          updateStatus();
+        }
+      }
+      break;
+    case REG_PARAM_SPEED:
+      if (size >= 4 && idx + 4 <= size + idx) {
+        memcpy(&speedMmS, &data[idx], 4);
+        idx += 4;
+        updateStatus();
+      }
+      break;
+    case REG_PARAM_TIMEOUT:
+      if (size >= 4 && idx + 4 <= size + idx) {
+        memcpy(&timeoutMs, &data[idx], 4);
+        idx += 4;
+        updateStatus();
+      }
+      break;
+    case REG_PARAM_HOLD_TIMEOUT:
+      if (size >= 4 && idx + 4 <= size + idx) {
+        memcpy(&holdTimeoutMs, &data[idx], 4);
+        idx += 4;
+        updateStatus();
+      }
+      break;
+    case REG_PARAM_HOLD_TIMEOUT_ENABLED:
+      if (size >= 1 && idx < size + idx) {
+        holdTimeoutEnabled = (data[idx++] != 0);
+        updateStatus();
+      }
+      break;
+    case REG_PARAM_MULTI_PRESS_COUNT:
+      if (size >= 1 && idx < size + idx) {
+        multiPressCount = data[idx++];
+        updateStatus();
+      }
+      break;
+    default:
+      // Unknown register, ignore
+      break;
+    }
+  }
+
+  void handleI2CCommand(const uint8_t cmd) {
+    switch (cmd) {
+    case CMD_PUSH:
+      mode = Mode::Continuous;
+      continuousStart = hw.timeMs();
+      setMotor(Motor::Push);
+      break;
+    case CMD_RETRACT:
+      mode = Mode::Continuous;
+      continuousStart = hw.timeMs();
+      setMotor(Motor::Retract);
+      break;
+    case CMD_HOLD:
+      holdTimeoutEnabled = false;
+      mode = Mode::Hold;
+      setMotor(Motor::Hold);
+      break;
+    case CMD_REGULAR:
+      mode = Mode::Regular;
+      setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
+      break;
+    case CMD_OFF:
+      mode = Mode::Regular;
+      setMotor(Motor::Off);
+      break;
+    default:
+      // Unknown command, ignore;
+      break;
     }
     updateStatus();
   }
@@ -400,6 +601,31 @@ private:
     if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
       hw.writeLineF("speed=%.2f", speedMmS);
       lastSpeedMmS = speedMmS;
+    }
+#endif
+#ifdef ENABLE_I2C_PROTOCOL
+    bool changed = false;
+    if (hw.filamentPresent() != lastFilament || force)
+      changed = true;
+    if (mode != lastMode || force)
+      changed = true;
+    if (motor != lastMotor || force)
+      changed = true;
+    if (timedOut != lastTimedOut || force)
+      changed = true;
+    if (lastTimeoutMs != timeoutMs || force)
+      changed = true;
+    if (lastHoldTimeoutMs != holdTimeoutMs || force)
+      changed = true;
+    if (lastHoldTimeoutEnabled != holdTimeoutEnabled || force)
+      changed = true;
+    if (lastMultiPressCount != multiPressCount || force)
+      changed = true;
+    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force)
+      changed = true;
+
+    if (changed) {
+      hw.setInterrupt(true);
     }
 #endif
   }

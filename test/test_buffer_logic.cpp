@@ -56,7 +56,7 @@ TEST(BufferLogic, SerialMoveCommand) {
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
   EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
-    return line.find("mode=serial") != std::string::npos;
+    return line.find("mode=move_command") != std::string::npos;
   }));
   hw.now += 1000;
   buf.loop();
@@ -299,3 +299,76 @@ TEST(BufferLogic, PresenceReporting) {
     return line.find("filament_present=0") != std::string::npos;
   }));
 }
+
+#ifdef ENABLE_I2C_PROTOCOL
+TEST(BufferLogic, I2CCommandPush) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  buf.init();
+
+  // Set Command: Push (0x03) to REG_COMMAND (0x00)
+  // [RegPtr=0x00] [Val=0x03]
+  std::vector<uint8_t> data = { 0x00, 0x03 };
+  hw.simulateI2CReceive(data);
+  hw.simulateI2CRequest(); // Simulate request to drain response if any (though command doesn't reply)
+
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("mode=continuous") != std::string::npos;
+  }));
+}
+
+TEST(BufferLogic, I2CStatusRead) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  buf.init();
+
+  // Force a status change to trigger interrupt
+  hw.presence = false;
+  buf.loop(); // Update status
+  EXPECT_TRUE(hw.intActive);
+
+  // Read Status Register: Write Ptr 0x01
+  std::vector<uint8_t> ptr = { 0x01 };
+  hw.simulateI2CReceive(ptr);
+
+  // Read Response
+  hw.simulateI2CRequest();
+
+  // Verify interrupt cleared
+  EXPECT_FALSE(hw.intActive);
+
+  // Verify status byte (Filament=0)
+  // expected status: 0 (since no bits set for empty, no timeout, etc)
+  EXPECT_EQ(hw.i2cTxBuffer.size(), 1);
+  if (!hw.i2cTxBuffer.empty())
+    EXPECT_EQ(hw.i2cTxBuffer[0], 0x00);
+}
+
+TEST(BufferLogic, I2CMoveCommand) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  buf.init();
+
+  // Set Speed first (optional, default is 30)
+
+  // Write Move Dist: 100.0mm
+  // Register 0x04
+  float dist = 100.0f;
+  std::vector<uint8_t> frame;
+  frame.push_back(0x04); // REG_MOVE_DIST
+  uint8_t *p = (uint8_t *) &dist;
+  for (int i = 0; i < 4; i++)
+    frame.push_back(p[i]);
+
+  hw.simulateI2CReceive(frame);
+
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("mode=move_command") != std::string::npos;
+  }));
+}
+#endif

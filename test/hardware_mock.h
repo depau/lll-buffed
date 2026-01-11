@@ -69,4 +69,39 @@ public:
   uint32_t timeMs() const { return now; }
 
   void serialSend(const std::string &line) { input.insert(input.end(), line.begin(), line.end()); }
+
+#ifdef ENABLE_I2C_PROTOCOL
+  void (*requestCb)(void *){ nullptr };
+  void *requestCtx{ nullptr };
+  void (*receiveCb)(void *, const uint8_t *, size_t){ nullptr };
+  void *receiveCtx{ nullptr };
+  bool intActive{ false };
+  std::vector<uint8_t> i2cTxBuffer;
+  // i2cRxBuffer no longer needed for buffering, we pass directly
+
+  void setI2CRequestCallback(void (*cb)(void *), void *ctx) {
+    requestCb = cb;
+    requestCtx = ctx;
+  }
+  void setI2CReceiveCallback(void (*cb)(void *, const uint8_t *, size_t), void *ctx) {
+    receiveCb = cb;
+    receiveCtx = ctx;
+  }
+  void setInterrupt(bool active) { intActive = active; }
+  void i2cWrite(uint8_t data) { i2cTxBuffer.push_back(data); }
+  void i2cWriteBuffer(const uint8_t *data, size_t len) { i2cTxBuffer.insert(i2cTxBuffer.end(), data, data + len); }
+
+  // Helpers to simulate I2C events
+  void simulateI2CRequest() {
+    if (requestCb) {
+      i2cTxBuffer.clear();
+      requestCb(requestCtx);
+    }
+  }
+  void simulateI2CReceive(const std::vector<uint8_t> &data) {
+    if (receiveCb) {
+      receiveCb(receiveCtx, data.data(), data.size());
+    }
+  }
+#endif
 };
