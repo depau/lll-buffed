@@ -10,6 +10,7 @@ The firmware is written in C++ and uses PlatformIO for development.
 
 ### Directory Structure
 
+- `README.md`: Instructions for installing and using the firmware.
 - `lib/`: Contains the source code files.
 - `src/`: Contains the entry point of the firmware.
 - `variants/`: Contains the board pin definitions and linker scripts for the device's microcontroller.
@@ -61,4 +62,5 @@ make sense. You can do this by running the following command in the root directo
 ```bash
 pio check
 ```
+
 If you decide to ignore a warning, please add a comment in your response explaining why you chose to ignore it.
