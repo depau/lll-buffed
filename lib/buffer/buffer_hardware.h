@@ -40,9 +40,10 @@ class BufferHardware {
   TMC2209Stepper driver{ STEPPER_UART, STEPPER_UART, STEPPER_R_SENSE, STEPPER_ADDR };
 
 #ifdef ENABLE_I2C_PROTOCOL
-  static inline void *i2cContext{ nullptr };
-  static inline void (*i2cRequestCallback)(void *){ nullptr };
-  static inline void (*i2cReceiveCallback)(void *, const uint8_t *, size_t){ nullptr };
+  static inline void *i2cContext = nullptr;
+  static inline void (*i2cRequestCallback)(void *) = nullptr;
+  static inline void (*i2cReceiveCallback)(void *, const uint8_t *, size_t) = nullptr;
+  static inline volatile unsigned int incomingI2CBytes = 0;
 
   // Buffer to hold incoming I2C data
   static inline uint8_t i2cRxBuffer[64]{};
@@ -55,23 +56,36 @@ class BufferHardware {
   static void onI2CReceive(const int numBytes) {
     if (numBytes <= 0)
       return;
-
-    // Read directly into our buffer
-    size_t count = 0;
-    while (Wire.available() && count < sizeof(i2cRxBuffer)) {
-      i2cRxBuffer[count++] = static_cast<uint8_t>(Wire.read());
-    }
-
-    // Drain any excess
-    while (Wire.available())
-      Wire.read();
-
-    if (i2cReceiveCallback && count > 0)
-      i2cReceiveCallback(i2cContext, i2cRxBuffer, count);
+    incomingI2CBytes += numBytes;
+    constexpr int bufSize = sizeof(i2cRxBuffer);
+    for (int i = 0; i < numBytes && i < bufSize; ++i)
+      i2cRxBuffer[i] = static_cast<uint8_t>(Wire.read());
   }
 #endif
 
 public:
+  static void loop() {
+#ifdef ENABLE_I2C_PROTOCOL
+    if (incomingI2CBytes > 0) {
+      // Read directly into our buffer
+      __disable_irq();
+      size_t count = incomingI2CBytes;
+      incomingI2CBytes = 0;
+      __enable_irq();
+
+      while (Wire.available() && count < sizeof(i2cRxBuffer))
+        i2cRxBuffer[count++] = static_cast<uint8_t>(Wire.read());
+
+      __disable_irq();
+      incomingI2CBytes = Wire.available();
+      __enable_irq();
+
+      if (i2cReceiveCallback && count > 0)
+        i2cReceiveCallback(i2cContext, i2cRxBuffer, count);
+    }
+#endif
+  }
+
   void initHardware() {
 #ifdef ENABLE_UART_PROTOCOL
     SerialUSB.begin(115200);

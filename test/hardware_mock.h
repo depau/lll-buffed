@@ -31,6 +31,7 @@ public:
   uint32_t now{ 0 };
   std::vector<char> input;
 
+  static void loop() {}
   static void initHardware() {}
 
   bool optical1() const { return opt1; }

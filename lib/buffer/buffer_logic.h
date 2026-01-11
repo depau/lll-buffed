@@ -126,6 +126,7 @@ public:
   }
 
   void loop() {
+    hw.loop();
 #ifdef ENABLE_UART_PROTOCOL
     processUartCommands();
 #endif
