@@ -30,27 +30,33 @@ inline constexpr int32_t STEPPER_MICROSTEPS = 64;
 constexpr float SPEED_RPM_FACTOR = 9.1463414634f;
 constexpr float STEPS_PER_REV = 200.0f;
 constexpr float SCREW_PITCH = 0.715f;
+
 #ifdef ENABLE_I2C_PROTOCOL
 inline constexpr uint32_t I2C_INT_PIN = PA5;
 inline constexpr uint32_t I2C_SDA_PIN = PB11;
 inline constexpr uint32_t I2C_SCL_PIN = PB10;
 #endif
 
+class scoped_irq_lock {
+public:
+  scoped_irq_lock() { __disable_irq(); }
+  ~scoped_irq_lock() { __enable_irq(); }
+};
+
 class BufferHardware {
   TMC2209Stepper driver{ STEPPER_UART, STEPPER_UART, STEPPER_R_SENSE, STEPPER_ADDR };
 
 #ifdef ENABLE_I2C_PROTOCOL
   static inline void *i2cContext = nullptr;
-  static inline void (*i2cRequestCallback)(void *) = nullptr;
-  static inline void (*i2cReceiveCallback)(void *, const uint8_t *, size_t) = nullptr;
+  static inline void (*onI2CRead)(void *ctx, uint8_t reg) = nullptr;
+  static inline void (*onI2CWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data) = nullptr;
+  static inline volatile uint8_t pendingReadRegister = -1;
   static inline volatile unsigned int incomingI2CBytes = 0;
-
-  // Buffer to hold incoming I2C data
   static inline uint8_t i2cRxBuffer[64]{};
 
   static void onI2CRequest() {
-    if (i2cRequestCallback)
-      i2cRequestCallback(i2cContext);
+    if (onI2CRead)
+      onI2CRead(i2cContext, pendingReadRegister);
   }
 
   static void onI2CReceive(const int numBytes) {
@@ -61,28 +67,34 @@ class BufferHardware {
     for (int i = 0; i < numBytes && i < bufSize; ++i)
       i2cRxBuffer[i] = static_cast<uint8_t>(Wire.read());
   }
+
+  static void handleI2CReceive() {
+    if (incomingI2CBytes <= 0)
+      return;
+
+    size_t count;
+    {
+      scoped_irq_lock lock;
+
+      count = incomingI2CBytes;
+      incomingI2CBytes = Wire.available();
+
+      if (count == 1)
+        pendingReadRegister = static_cast<int16_t>(i2cRxBuffer[0]);
+    }
+
+    if (count > 1) {
+      const uint8_t reg = i2cRxBuffer[0];
+      if (onI2CWrite)
+        onI2CWrite(i2cContext, reg, count - 1, &i2cRxBuffer[1]);
+    }
+  }
 #endif
 
 public:
   static void loop() {
 #ifdef ENABLE_I2C_PROTOCOL
-    if (incomingI2CBytes > 0) {
-      // Read directly into our buffer
-      __disable_irq();
-      size_t count = incomingI2CBytes;
-      incomingI2CBytes = 0;
-      __enable_irq();
-
-      while (Wire.available() && count < sizeof(i2cRxBuffer))
-        i2cRxBuffer[count++] = static_cast<uint8_t>(Wire.read());
-
-      __disable_irq();
-      incomingI2CBytes = Wire.available();
-      __enable_irq();
-
-      if (i2cReceiveCallback && count > 0)
-        i2cReceiveCallback(i2cContext, i2cRxBuffer, count);
-    }
+    handleI2CReceive();
 #endif
   }
 
@@ -186,19 +198,24 @@ public:
 #endif
 
 #ifdef ENABLE_I2C_PROTOCOL
-  static void setI2CRequestCallback(void (*cb)(void *), void *ctx) {
-    i2cRequestCallback = cb;
+  static void setI2CCallbacks(void *ctx,
+                              void (*onRead)(void *ctx, uint8_t reg),
+                              void (*onWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data)) {
     i2cContext = ctx;
+    onI2CRead = onRead;
+    onI2CWrite = onWrite;
   }
-  static void setI2CReceiveCallback(void (*cb)(void *, const uint8_t *, size_t), void *ctx) {
-    i2cReceiveCallback = cb;
-    i2cContext = ctx;
-  }
+
   static void setInterrupt(const bool active) { digitalWrite(I2C_INT_PIN, active ? LOW : HIGH); }
-  // I2C Read/Write wrappers
-  static void i2cWrite(uint8_t data) { Wire.write(data); }
-  static void i2cWriteBuffer(const uint8_t *data, size_t len) { Wire.write(data, len); }
-  // Removed i2cRead and i2cAvailable as they are no longer needed by Logic
+
+  static void i2cWrite(const uint8_t data) { Wire.write(data); }
+
+  static void i2cWrite(const uint8_t *data, const size_t len) { Wire.write(data, len); }
+
+  template<typename T>
+  static void i2cWriteValue(const T &value) {
+    i2cWrite(reinterpret_cast<const uint8_t *>(&value), sizeof(T));
+  }
 #endif
 
   static uint32_t timeMs() { return millis(); }

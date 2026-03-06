@@ -40,20 +40,25 @@ enum I2CCommand : uint8_t {
 };
 #endif
 
+template<typename T>
+void reinterpret_assign(T &dest, const uint8_t *src) {
+  std::memcpy(&dest, src, sizeof(T));
+}
+
 template<class HW>
 class Buffer {
-  enum class Mode {
-    Regular,
+  enum class Mode : uint8_t {
+    Regular = 0,
     Continuous,
     MoveCommand,
     Hold,
     Manual
   };
-  enum class Motor {
+  enum class Motor : uint8_t {
+    Off = 0,
     Push,
     Retract,
     Hold,
-    Off
   };
   struct ButtonState {
     bool pressed{ false };
@@ -100,10 +105,6 @@ class Buffer {
   uint32_t lastMultiPressCount{ 0 };
   float lastSpeedMmS{ 0.0f };
 
-#ifdef ENABLE_I2C_PROTOCOL
-  uint8_t i2cRegPtr{ 0 };
-#endif
-
 public:
   Buffer() = default;
 
@@ -120,8 +121,7 @@ public:
     updateStatus(true);
 
 #ifdef ENABLE_I2C_PROTOCOL
-    hw.setI2CRequestCallback(onI2CRequest, this);
-    hw.setI2CReceiveCallback(onI2CReceive, this);
+    hw.setI2CCallbacks(this, onI2CReadTrampoline, onI2CWriteTrampoline);
 #endif
   }
 
@@ -130,6 +130,7 @@ public:
 #ifdef ENABLE_UART_PROTOCOL
     processUartCommands();
 #endif
+
     filamentPresent = hw.filamentPresent();
     handleButtons();
 
@@ -244,33 +245,27 @@ private:
 #endif
 
 #ifdef ENABLE_I2C_PROTOCOL
-  static void onI2CRequest(void *ctx) {
-    if (auto *self = static_cast<Buffer *>(ctx)) {
-      self->handleI2CRequest();
-    }
+  static void onI2CReadTrampoline(void *ctx, const uint8_t reg) {
+    if (auto *self = static_cast<Buffer *>(ctx))
+      self->onI2CRead(reg);
   }
 
-  static void onI2CReceive(void *ctx, const uint8_t *data, size_t size) {
-    if (auto *self = static_cast<Buffer *>(ctx)) {
-      self->handleI2CReceive(data, size);
-    }
+  static void onI2CWriteTrampoline(void *ctx, const uint8_t reg, const size_t size, const uint8_t *data) {
+    if (auto *self = static_cast<Buffer *>(ctx))
+      self->onI2CWrite(reg, size, data);
   }
 
-  void handleI2CRequest() {
-    // If status was read, we can clear the interrupt if it was due to status change
-    if (i2cRegPtr == REG_STATUS) {
+  void onI2CRead(const uint8_t reg) {
+    if (reg == REG_STATUS)
       hw.setInterrupt(false);
-    }
 
-    switch (i2cRegPtr) {
+    switch (reg) {
     case REG_STATUS: {
       uint8_t status = 0;
       if (filamentPresent)
         status |= 0x01;
       if (timedOut)
         status |= 0x02;
-      if (holdTimeoutEnabled)
-        status |= 0x04;
       hw.i2cWrite(status);
       break;
     }
@@ -281,13 +276,13 @@ private:
       hw.i2cWrite(static_cast<uint8_t>(motor));
       break;
     case REG_PARAM_SPEED:
-      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&speedMmS), sizeof(speedMmS));
+      hw.i2cWriteValue(speedMmS);
       break;
     case REG_PARAM_TIMEOUT:
-      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&timeoutMs), sizeof(timeoutMs));
+      hw.i2cWriteValue(timeoutMs);
       break;
     case REG_PARAM_HOLD_TIMEOUT:
-      hw.i2cWriteBuffer(reinterpret_cast<uint8_t *>(&holdTimeoutMs), sizeof(holdTimeoutMs));
+      hw.i2cWriteValue(holdTimeoutMs);
       break;
     case REG_PARAM_HOLD_TIMEOUT_ENABLED:
       hw.i2cWrite(holdTimeoutEnabled ? 1 : 0);
@@ -301,35 +296,17 @@ private:
     }
   }
 
-  void handleI2CReceive(const uint8_t *data, size_t size) {
-    if (size < 1)
+  void onI2CWrite(const uint8_t reg, const size_t size, const uint8_t *data) {
+    if (size == 0)
       return;
 
-    size_t idx = 0;
-
-    // First byte is register pointer
-    if (idx < size) {
-      i2cRegPtr = data[idx++];
-      size--;
-    }
-
-    if (size == 0)
-      return; // Just setting pointer
-
-    // Writing to register
-    switch (i2cRegPtr) {
+    switch (reg) {
     case REG_COMMAND:
-      if (size >= 1 && idx < size + idx) {
-        const uint8_t cmd = data[idx++];
-        handleI2CCommand(cmd);
-      }
+      handleI2CCommand(data[0]);
       break;
     case REG_MOVE_DIST:
-      if (size >= 4 && idx + 4 <= size + idx) {
-        float dist;
-        memcpy(&dist, &data[idx], 4);
-        idx += 4;
-
+      if (size >= sizeof(float)) {
+        const auto dist = *reinterpret_cast<const float *>(data);
         if (dist != 0.0f && speedMmS > 0.0f) {
           moveDir = dist > 0 ? Motor::Push : Motor::Retract;
           const float ms = std::fabs(dist) * 1000.0f / speedMmS;
@@ -341,35 +318,32 @@ private:
       }
       break;
     case REG_PARAM_SPEED:
-      if (size >= 4 && idx + 4 <= size + idx) {
-        memcpy(&speedMmS, &data[idx], 4);
-        idx += 4;
+      if (size >= sizeof(speedMmS)) {
+        reinterpret_assign(speedMmS, data);
         updateStatus();
       }
       break;
     case REG_PARAM_TIMEOUT:
-      if (size >= 4 && idx + 4 <= size + idx) {
-        memcpy(&timeoutMs, &data[idx], 4);
-        idx += 4;
+      if (size >= sizeof(timeoutMs)) {
+        reinterpret_assign(timeoutMs, data);
         updateStatus();
       }
       break;
     case REG_PARAM_HOLD_TIMEOUT:
-      if (size >= 4 && idx + 4 <= size + idx) {
-        memcpy(&holdTimeoutMs, &data[idx], 4);
-        idx += 4;
+      if (size >= sizeof(holdTimeoutMs)) {
+        reinterpret_assign(holdTimeoutMs, data);
         updateStatus();
       }
       break;
     case REG_PARAM_HOLD_TIMEOUT_ENABLED:
-      if (size >= 1 && idx < size + idx) {
-        holdTimeoutEnabled = (data[idx++] != 0);
+      if (size >= 1) {
+        holdTimeoutEnabled = data[0] != 0;
         updateStatus();
       }
       break;
     case REG_PARAM_MULTI_PRESS_COUNT:
-      if (size >= 1 && idx < size + idx) {
-        multiPressCount = data[idx++];
+      if (size >= sizeof(multiPressCount)) {
+        reinterpret_assign(multiPressCount, data);
         updateStatus();
       }
       break;
