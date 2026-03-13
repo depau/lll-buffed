@@ -17,12 +17,12 @@ static void out_str(char *&buf, size_t &rem, const char *s, int &count) {
   }
 }
 
-static void out_uint(char *&buf, size_t &rem, uint32_t v, unsigned base, int &count) {
+static void out_uint(char *&buf, size_t &rem, uint32_t v, int &count) {
   char tmp[16];
   unsigned i = 0;
   do {
-    tmp[i++] = "0123456789abcdef"[v % base];
-    v /= base;
+    tmp[i++] = '0' + (v % 10);
+    v /= 10;
   } while (v);
   while (i--)
     out_char(buf, rem, tmp[i], count);
@@ -33,7 +33,7 @@ static void out_int(char *&buf, size_t &rem, int32_t v, int &count) {
     out_char(buf, rem, '-', count);
     v = -v;
   }
-  out_uint(buf, rem, static_cast<uint32_t>(v), 10, count);
+  out_uint(buf, rem, static_cast<uint32_t>(v), count);
 }
 
 static void out_float(char *&buf, size_t &rem, double f, int &count) {
@@ -54,7 +54,7 @@ static void out_float(char *&buf, size_t &rem, double f, int &count) {
   const auto ip = static_cast<uint32_t>(f);
   double frac = f - static_cast<double>(ip);
 
-  out_uint(buf, rem, ip, 10, count);
+  out_uint(buf, rem, ip, count);
   out_char(buf, rem, '.', count);
 
   for (int i = 0; i < 2; ++i) { // 2 decimal places
@@ -82,7 +82,7 @@ int tiny_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
       out_int(p, rem, va_arg(ap, int), count);
       break;
     case 'u':
-      out_uint(p, rem, va_arg(ap, unsigned), 10, count);
+      out_uint(p, rem, va_arg(ap, unsigned), count);
       break;
     case 's':
       out_str(p, rem, va_arg(ap, const char *), count);
@@ -116,4 +116,50 @@ int tiny_snprintf(char *buf, const size_t size, const char *fmt, ...) {
   const int r = tiny_vsnprintf(buf, size, fmt, ap);
   va_end(ap);
   return r;
+}
+
+static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *outexp) {
+  bool neg = false;
+  *outnum = 0;
+  *outexp = 0;
+
+  while (*str == ' ' || *str == '\t')
+    ++str;
+
+  if (*str == '-') {
+    neg = true;
+    ++str;
+  } else if (*str == '+') {
+    ++str;
+  }
+
+  bool decimal = false;
+  while ((*str >= '0' && *str <= '9') || *str == '.') {
+    if (*str == '.')
+      decimal = true;
+    else if (decimal)
+      *outexp += 1;
+    *outnum = *outnum * 10 + (*str - '0');
+    ++str;
+  }
+
+  if (neg)
+    *outnum = -*outnum;
+}
+
+unsigned int tiny_strtoul(const char *str) {
+  int32_t num;
+  unsigned int exp;
+  tiny_strtod_impl(str, &num, &exp);
+  return static_cast<unsigned int>(num);
+}
+
+float tiny_strtof(const char *str) {
+  int32_t num;
+  unsigned int exp;
+  tiny_strtod_impl(str, &num, &exp);
+  auto f = static_cast<double>(num);
+  while (exp--)
+    f /= 10.0;
+  return static_cast<float>(f);
 }

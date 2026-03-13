@@ -65,7 +65,7 @@ to reapply them after a power cycle.
 - `set_timeout <MS>`: Set the timeout for the continuous run and regular modes in milliseconds. Default is 90000 (1
   minute 30 seconds).
 - `set_hold_timeout <MS>`: Set the hold timeout in milliseconds. Default is 10000 (10 seconds).
-- `set_hold_timeout_enabled <0|1>`: Enable or disable the hold timeout (power save mode). Default is 0 (disabled).
+- `set_hold_timeout_en <0|1>`: Enable or disable the hold timeout (power save mode). Default is 0 (disabled).
 - `set_multi_press_count <N>`: Set the number of button presses required to enter continuous run mode. Default is 2.
 - `set_speed <MM/S>`: Set the speed of the motor in millimeters per second. Default is 30.
 
@@ -87,7 +87,7 @@ following:
 - `timed_out=<0|1>`: Whether the buffer has timed out in continuous run or regular mode.
 - `timeout=<MS>`: The current configured timeout in milliseconds.
 - `hold_timeout=<MS>`: The current configured hold timeout in milliseconds (power save mode).
-- `hold_timeout_enabled=<0|1>`: Whether the hold timeout (power save mode) is enabled.
+- `hold_timeout_en=<0|1>`: Whether the hold timeout (power save mode) is enabled.
 - `multi_press_count=<N>`: The number of button presses required to enter continuous run mode.
 - `speed=<MM/S>`: The current speed of the motor in millimeters per second.
 

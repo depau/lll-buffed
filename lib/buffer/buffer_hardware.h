@@ -169,8 +169,10 @@ public:
 
 #ifdef ENABLE_UART_PROTOCOL
   static void writeLine(const char *l) {
-    SerialUSB.println(l);
-    Serial2.println(l);
+    SerialUSB.write(l);
+    SerialUSB.write('\n');
+    Serial2.write(l);
+    Serial2.write('\n');
   }
 
   template<size_t BufSize = 64>
