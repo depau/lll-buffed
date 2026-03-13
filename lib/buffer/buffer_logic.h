@@ -49,6 +49,7 @@ void reinterpret_assign(T &dest, const uint8_t *src) {
 
 template<class HW>
 class Buffer {
+public:
   enum class Mode : uint8_t {
     Regular = 0,
     Continuous,
@@ -57,6 +58,8 @@ class Buffer {
     Manual,
     Emptying
   };
+
+private:
   enum class Motor : uint8_t {
     Off = 0,
     Push,
@@ -79,7 +82,7 @@ class Buffer {
   bool holdTimeoutEnabled{ false };
   uint8_t multiPressCount{ 2 };
   float speedMmS{ 30.0f };
-  uint32_t emptyingPushTimeoutMs{ 5000 };
+  uint32_t emptyingPushTimeoutMs{ 2500 };
 
   bool filamentPresent{ false };
   bool timedOut{ false };
@@ -118,9 +121,8 @@ public:
   void init() {
     hw.initHardware();
     filamentPresent = hw.filamentPresent();
-    mode = Mode::Regular;
-    lastMode = mode;
-    motor = Motor::Off;
+    lastFilament = filamentPresent;
+    setMode(Mode::Regular);
     setMotor(filamentPresent ? Motor::Hold : Motor::Off);
     lastMotor = motor;
     hw.setPresenceLed(filamentPresent);
@@ -132,13 +134,21 @@ public:
 #endif
   }
 
+  Mode getMode() const { return mode; }
+
   void loop() {
     hw.loop();
 #ifdef ENABLE_UART_PROTOCOL
     processUartCommands();
 #endif
 
+    lastFilament = filamentPresent;
     filamentPresent = hw.filamentPresent();
+    if (filamentPresent != lastFilament) {
+      hw.setPresenceLed(filamentPresent);
+      hw.setPresenceOutput(filamentPresent);
+    }
+
     handleButtons();
 
     switch (mode) {
@@ -204,8 +214,7 @@ private:
     }
   }
 
-  // return true if str starts with all the varargs strings in order, concatenated
-  static bool startsWith(const char *str, ...) {
+  static const char *startsWith(const char *str, ...) {
     va_list args;
     va_start(args, str);
     size_t offset = 0;
@@ -213,63 +222,61 @@ private:
       const size_t len = std::strlen(prefix);
       if (std::strncmp(str + offset, prefix, len) != 0) {
         va_end(args);
-        return false;
+        return nullptr;
       }
       offset += len;
     }
     va_end(args);
-    return true;
+    return str + offset;
   }
 
   void handleUartCommand(const char *cmd) {
+    const char *arg = nullptr;
     if (strcmp(cmd, "push") == 0 || strcmp(cmd, "p") == 0) {
       if (!hw.filamentPresent())
         return;
-      mode = Mode::Continuous;
-      continuousStart = hw.timeMs();
+      setMode(Mode::Continuous);
       setMotor(Motor::Push);
     } else if (strcmp(cmd, "retract") == 0 || strcmp(cmd, "r") == 0) {
       if (!hw.filamentPresent())
         return;
-      mode = Mode::Continuous;
-      continuousStart = hw.timeMs();
+      setMode(Mode::Continuous);
       setMotor(Motor::Retract);
     } else if (strcmp(cmd, "hold") == 0 || strcmp(cmd, "h") == 0) {
       holdTimeoutEnabled = false;
-      mode = Mode::Hold;
+      setMode(Mode::Hold);
       setMotor(Motor::Hold);
     } else if (strcmp(cmd, "regular") == 0 || strcmp(cmd, "n") == 0) {
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
     } else if (strcmp(cmd, "off") == 0 || strcmp(cmd, "o") == 0) {
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       setMotor(Motor::Off);
     } else if (strcmp(cmd, "query") == 0 || strcmp(cmd, "q") == 0) {
       updateStatus(true);
-    } else if (startsWith(cmd, "move", nullptr) || startsWith(cmd, "m ", nullptr)) {
-      if (const char *space = strchr(cmd, ' ')) {
-        if (const float val = tiny_strtof(space + 1); val != 0.0f && speedMmS > 0.0f) {
-          moveDir = val > 0 ? Motor::Push : Motor::Retract;
-          const float ms = std::fabs(val) * 1000.0f / speedMmS;
-          moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
-          mode = Mode::MoveCommand;
-          setMotor(moveDir);
-        }
+    } else if (((arg = startsWith(cmd, "move ", nullptr))) || ((arg = startsWith(cmd, "m ", nullptr)))) {
+      if (const float val = tiny_strtof(arg); val != 0.0f && speedMmS > 0.0f) {
+        moveDir = val > 0 ? Motor::Push : Motor::Retract;
+        const float ms = std::fabs(val) * 1000.0f / speedMmS;
+        moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
+        setMode(Mode::MoveCommand);
+        setMotor(moveDir);
       }
-    } else if (startsWith(cmd, "set_", "timeout", nullptr)) {
-      timeoutMs = tiny_strtoul(cmd + 12);
-    } else if (startsWith(cmd, "set_", "hold_", "timeout", nullptr)) {
-      if (startsWith(cmd, "set_", "hold_", "timeout", "_en", nullptr)) {
-        holdTimeoutEnabled = static_cast<bool>(tiny_strtoul(cmd + 25));
+    } else if ((arg = startsWith(cmd, "set_", "timeout", " ", nullptr))) {
+      timeoutMs = tiny_strtoul(arg);
+    } else if ((arg = startsWith(cmd, "set_", "hold_", "timeout", nullptr))) {
+      const char *oldArg = arg;
+      if ((arg = startsWith(arg, "_en ", nullptr))) {
+        holdTimeoutEnabled = static_cast<bool>(tiny_strtoul(arg));
       } else {
-        holdTimeoutMs = tiny_strtoul(cmd + 17);
+        holdTimeoutMs = tiny_strtoul(oldArg);
       }
-    } else if (startsWith(cmd, "set_", "multi_press_count", nullptr)) {
-      multiPressCount = static_cast<uint8_t>(tiny_strtoul(cmd + 22));
-    } else if (startsWith(cmd, "set_", "speed", nullptr)) {
-      speedMmS = tiny_strtof(cmd + 10);
-    } else if (startsWith(cmd, "set_", "emptying_", "timeout", nullptr)) {
-      emptyingPushTimeoutMs = tiny_strtoul(cmd + 24);
+    } else if ((arg = startsWith(cmd, "set_", "multi_press_count", " ", nullptr))) {
+      multiPressCount = static_cast<uint8_t>(tiny_strtoul(arg));
+    } else if ((arg = startsWith(cmd, "set_", "speed", " ", nullptr))) {
+      speedMmS = tiny_strtof(arg);
+    } else if ((arg = startsWith(cmd, "set_", "emptying_", "timeout", " ", nullptr))) {
+      emptyingPushTimeoutMs = tiny_strtoul(arg);
     }
     updateStatus();
   }
@@ -342,7 +349,7 @@ private:
           moveDir = dist > 0 ? Motor::Push : Motor::Retract;
           const float ms = std::fabs(dist) * 1000.0f / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
-          mode = Mode::MoveCommand;
+          setMode(Mode::MoveCommand);
           setMotor(moveDir);
           updateStatus();
         }
@@ -389,28 +396,26 @@ private:
     case CMD_PUSH:
       if (!hw.filamentPresent())
         break;
-      mode = Mode::Continuous;
-      continuousStart = hw.timeMs();
+      setMode(Mode::Continuous);
       setMotor(Motor::Push);
       break;
     case CMD_RETRACT:
       if (!hw.filamentPresent())
         break;
-      mode = Mode::Continuous;
-      continuousStart = hw.timeMs();
+      setMode(Mode::Continuous);
       setMotor(Motor::Retract);
       break;
     case CMD_HOLD:
       holdTimeoutEnabled = false;
-      mode = Mode::Hold;
+      setMode(Mode::Hold);
       setMotor(Motor::Hold);
       break;
     case CMD_REGULAR:
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
       break;
     case CMD_OFF:
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       setMotor(Motor::Off);
       break;
     default:
@@ -426,7 +431,7 @@ private:
       if (!s.pressed) {
         s.pressed = true;
         s.pressStart = now;
-        mode = Mode::Manual;
+        setMode(Mode::Manual);
         setMotor(dir);
       }
       return;
@@ -445,8 +450,7 @@ private:
       s.lastRelease = now;
       if (s.count >= multiPressCount) {
         if (hw.filamentPresent()) {
-          mode = Mode::Continuous;
-          continuousStart = now;
+          setMode(Mode::Continuous);
           setMotor(dir);
         }
         s.count = 0;
@@ -454,19 +458,19 @@ private:
       }
       holdTimeoutEnabled = false;
       if (hw.filamentPresent()) {
-        mode = Mode::Hold;
+        setMode(Mode::Hold);
         setMotor(Motor::Hold);
       } else {
-        mode = Mode::Regular;
+        setMode(Mode::Regular);
         setMotor(Motor::Off);
       }
     } else {
       s.count = 0;
       if (hw.filamentPresent()) {
-        mode = Mode::Regular;
+        setMode(Mode::Regular);
         setMotor(Motor::Hold);
       } else {
-        mode = Mode::Regular;
+        setMode(Mode::Regular);
         setMotor(Motor::Off);
       }
     }
@@ -478,20 +482,14 @@ private:
   }
   void handleRegular() {
     if (!hw.filamentPresent()) {
-      hw.setPresenceLed(false);
-      hw.setPresenceOutput(false);
       if (lastFilament) {
-        mode = Mode::Emptying;
-        emptyingStart = hw.timeMs();
-        emptyingPushStart = 0;
+        setMode(Mode::Emptying);
       } else {
         setMotor(Motor::Off);
         timedOut = false;
       }
       return;
     }
-    hw.setPresenceLed(true);
-    hw.setPresenceOutput(true);
 
     bool move = false;
     if (hw.optical1()) {
@@ -503,16 +501,15 @@ private:
       moveStart = hw.timeMs();
       move = true;
     } else if (hw.optical2()) {
-      bool newFilament = filamentPresent && !lastFilament;
-      if (motor != Motor::Off || newFilament) {
+      if (motor != Motor::Off) {
         setMotor(Motor::Hold);
       }
     }
 
     if (motor == Motor::Push || motor == Motor::Retract) {
-      if (!move && hw.timeMs() - moveStart > timeoutMs) {
+      if (!move && hw.timeMs() - moveStart >= timeoutMs) {
         timedOut = true;
-        mode = Mode::Hold;
+        setMode(Mode::Hold);
         setMotor(Motor::Hold);
       }
     } else {
@@ -522,58 +519,60 @@ private:
 
   void handleEmptying() {
     if (hw.filamentPresent()) {
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       return;
     }
 
-    if (hw.timeMs() - emptyingStart > timeoutMs) {
-      mode = Mode::Regular;
+    if (hw.timeMs() - emptyingStart >= timeoutMs) {
+      setMode(Mode::Regular);
       setMotor(Motor::Off);
       return;
     }
 
-    bool move = false;
+    // Work similarly to regular mode
     if (hw.optical1()) {
       if (motor != Motor::Push || emptyingPushStart == 0) {
         emptyingPushStart = hw.timeMs();
       }
       setMotor(Motor::Push);
-      move = true;
-    } else if (hw.optical3()) {
-      setMotor(Motor::Retract);
-      emptyingPushStart = 0;
-      move = true;
     } else if (hw.optical2()) {
       setMotor(Motor::Hold);
-      emptyingPushStart = 0;
+    } else if (hw.optical3()) {
+      setMotor(Motor::Retract);
     }
 
     // If we've been pushing without moving for a while, assume the tail of the filament has left the gear and
     // therefore the spring is no longer under tension
-    if (motor == Motor::Push) {
-      if (!move && emptyingPushTimeoutMs > 0 && hw.timeMs() - emptyingPushStart > emptyingPushTimeoutMs) {
-        mode = Mode::Regular;
-        setMotor(Motor::Off);
-      }
+    if (motor == Motor::Push && emptyingPushTimeoutMs > 0 && hw.timeMs() - emptyingPushStart >= emptyingPushTimeoutMs) {
+      setMode(Mode::Regular);
+      setMotor(Motor::Off);
     }
   }
 
   void handleMoveCommand() {
     if (hw.timeMs() >= moveEnd) {
-      mode = hw.filamentPresent() ? Mode::Hold : Mode::Regular;
-      setMotor(hw.filamentPresent() ? Motor::Hold : Motor::Off);
+      if (hw.filamentPresent()) {
+        setMode(Mode::Hold);
+        setMotor(Motor::Hold);
+      } else {
+        setMode(Mode::Regular);
+        setMotor(Motor::Off);
+      }
     }
   }
 
   void handleContinuous() {
     if (!hw.filamentPresent()) {
-      mode = Mode::Emptying;
-      emptyingStart = hw.timeMs();
-      emptyingPushStart = 0;
+      if (motor == Motor::Retract) {
+        setMode(Mode::Regular);
+        setMotor(Motor::Off);
+      } else {
+        setMode(Mode::Emptying);
+      }
       return;
     }
-    if (timeoutMs > 0 && hw.timeMs() - continuousStart > timeoutMs) {
-      mode = Mode::Hold;
+    if (timeoutMs > 0 && hw.timeMs() - continuousStart >= timeoutMs) {
+      setMode(Mode::Hold);
       setMotor(Motor::Hold);
     }
   }
@@ -583,16 +582,15 @@ private:
       return;
     }
     if (hw.timeMs() - holdStart >= holdTimeoutMs) {
-      mode = Mode::Regular;
+      setMode(Mode::Regular);
       setMotor(Motor::Off);
     }
   }
 
   void updateStatus(bool force = false) {
 #ifdef ENABLE_UART_PROTOCOL
-    if (const bool fil = hw.filamentPresent(); fil != lastFilament || force) {
-      hw.writeLineF("filament_present=%d", fil ? 1 : 0);
-      lastFilament = fil;
+    if (filamentPresent != lastFilament || force) {
+      hw.writeLineF("filament_present=%d", filamentPresent ? 1 : 0);
     }
     if (mode != lastMode || force) {
       auto modeStr = "";
@@ -716,5 +714,26 @@ private:
       hw.stepperOff();
       break;
     }
+  }
+
+  void setMode(Mode m) {
+    if (mode == m) {
+      return;
+    }
+    const uint32_t now = hw.timeMs();
+
+    switch (m) {
+    case Mode::Continuous:
+      continuousStart = now;
+      break;
+    case Mode::Emptying:
+      emptyingStart = now;
+      emptyingPushStart = 0;
+      break;
+    default:
+      break;
+    }
+
+    mode = m;
   }
 };

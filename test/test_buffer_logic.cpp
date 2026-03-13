@@ -23,9 +23,7 @@ TEST(BufferLogic, StartupWithFilament) {
   hw.opt2 = true;
   buf.init();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
-  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
-    return line.find("mode=regular") != std::string::npos;
-  }));
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
 }
 
 TEST(BufferLogic, ButtonManualMove) {
@@ -37,13 +35,12 @@ TEST(BufferLogic, ButtonManualMove) {
   hw.btnF = true;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Manual);
   hw.now += 200;
   hw.btnF = false;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
-  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
-    return line.find("mode=manual") != std::string::npos;
-  }));
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
 }
 
 TEST(BufferLogic, SerialMoveCommand) {
@@ -124,15 +121,6 @@ TEST(BufferLogic, ReactToOpticalSensors) {
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
   EXPECT_EQ(hw.lines.back(), "status=hold");
-  hw.presence = false;
-  hw.now += 1000;
-  buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Enters emptying mode first
-  EXPECT_EQ(hw.lines.back(), "mode=emptying");
-  hw.now += 121000; // Wait for emptying timeout
-  buf.loop();
-  buf.loop(); // Need a second loop to process Regular mode transition
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
 }
 
 TEST(BufferLogic, ContinuousMode) {
@@ -152,7 +140,8 @@ TEST(BufferLogic, ContinuousMode) {
   hw.opt3 = false;
   hw.now += 1000;
   buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Should be in regular mode, with hold state
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // Should be in regular mode, with off state
   hw.serialSend("push\n");
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push); // Now it should move
@@ -221,18 +210,6 @@ TEST(BufferLogic, ContinuousMode) {
     buf.loop();
   }
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Retract); // Should have enabled continuous mode
-
-  hw.serialSend("push\n");
-  hw.now += 1000;
-  buf.loop();
-  hw.presence = false;
-  hw.now += 1000;
-  buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push); // Enters emptying mode
-  hw.now += 121000; // Wait for emptying timeout
-  buf.loop();
-  buf.loop(); // Need a second loop to process Regular mode transition
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // Should turn off after timeout
 }
 
 TEST(BufferLogic, ManualStopAndHoldTimeout) {
@@ -245,14 +222,14 @@ TEST(BufferLogic, ManualStopAndHoldTimeout) {
 
   buf.init();
   hw.serialSend("set_hold_timeout 5000\n");
-  hw.serialSend("set_hold_timeout_enabled 1\n");
+  hw.serialSend("set_hold_timeout_en 1\n");
   buf.loop();
 
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Should start in hold mode
   hw.now += 1000;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Still holding
-  hw.now += 5000;
+  hw.now += 5001;
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // Should turn off after hold timeout
   hw.opt1 = true;
@@ -308,7 +285,210 @@ TEST(BufferLogic, PresenceReporting) {
   }));
 }
 
-#ifdef ENABLE_I2C_PROTOCOL
+TEST(BufferLogic, RegularModeFilamentRunout) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  hw.opt2 = true;
+  buf.init();
+  hw.serialSend("set_emptying_timeout 5000\n");
+  buf.loop();
+
+  SCOPED_TRACE("The buffer should be in regular mode with the motor halted");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  SCOPED_TRACE("Filament runout");
+  hw.presence = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("The motor should still be stopped since, when hitting opt2, the spring is still tensioned. We should "
+               "however be in emptying mode");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("mode=emptying") != std::string::npos;
+  }));
+
+  hw.opt2 = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Still holding, we consider the spring to be still tensioned until opt1 is hit and held");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  hw.opt1 = true;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.opt1 = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Still pushing since the spring is still tensioned, else we wouldn't have left opt1");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.opt2 = true;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start holding");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  hw.opt2 = false;
+  hw.opt3 = true;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start retracting");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Retract);
+
+  hw.opt3 = false;
+  hw.opt2 = true;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start holding");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  hw.opt1 = true;
+  hw.opt2 = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.now += 5100;
+  buf.loop();
+
+  SCOPED_TRACE("Should be back in regular mode, with the motor off since there's no filament");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("mode=regular") != std::string::npos;
+  }));
+}
+
+TEST(BufferLogic, EmptyingModeTimeout) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  hw.opt2 = true;
+  buf.init();
+  hw.serialSend("set_timeout 100000\n");
+  buf.loop();
+
+  SCOPED_TRACE("The buffer should be in regular mode with the motor halted");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  SCOPED_TRACE("Filament runout");
+  hw.presence = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("The motor should still be stopped since, when hitting opt2, the spring is still tensioned. We should "
+               "however be in emptying mode");
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Emptying);
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  hw.now += 100100;
+  buf.loop();
+  SCOPED_TRACE("Should be back in regular mode, with the motor off since the timeout has elapsed");
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
+}
+
+TEST(BufferLogic, ContinuousPushFilamentRunout) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  hw.opt1 = true;
+  buf.init();
+  hw.serialSend("set_emptying_timeout 5000\n");
+  hw.serialSend("push\n");
+  buf.loop();
+
+  SCOPED_TRACE("Filament present, should start pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  SCOPED_TRACE("Filament runout");
+  hw.presence = false;
+  hw.now += 100;
+  buf.loop();  // Trigger emptying mode
+  buf.loop();  // Run emptying mode logic once
+
+  SCOPED_TRACE("Should keep pushing until the emptying mode timeout");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.now += 5001;
+  buf.loop();
+
+  SCOPED_TRACE("Should shut down after the emptying mode timeout since there's no filament");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
+}
+
+TEST(BufferLogic, ContinuousRetractFilamentRunout) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  hw.opt1 = true;
+  buf.init();
+  hw.serialSend("set_emptying_timeout 5000\n");
+  hw.serialSend("retract\n");
+  buf.loop();
+
+  SCOPED_TRACE("Filament present, should start retracting");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Retract);
+
+  SCOPED_TRACE("Filament runout");
+  hw.presence = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should immediately shut down since there's no filament");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
+}
+
+TEST(BufferLogic, UARTSettings) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  buf.init();
+  buf.loop();
+  
+  hw.serialSend("set_speed 123\n");
+  hw.serialSend("set_timeout 12345\n");
+  hw.serialSend("set_hold_timeout 5456\n");
+  hw.serialSend("set_hold_timeout_en 0\n");
+  hw.serialSend("set_emptying_timeout 6789\n");
+  hw.serialSend("set_multi_press_count 7\n");
+  buf.loop();
+
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("filament_present=1") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("speed=123.00") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("timeout=12345") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("hold_timeout=5456") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("hold_timeout_en=0") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("emptying_timeout=6789") != std::string::npos;
+  }));
+  EXPECT_TRUE(std::any_of(hw.lines.begin(), hw.lines.end(), [](const std::string &line) {
+    return line.find("multi_press_count=7") != std::string::npos;
+  }));
+}
+
 TEST(BufferLogic, I2CCommandPush) {
   Buffer<FakeHardware> buf;
   FakeHardware &hw = buf.getHardware();
@@ -379,4 +559,3 @@ TEST(BufferLogic, I2CMoveCommand) {
     return line.find("mode=move_command") != std::string::npos;
   }));
 }
-#endif
