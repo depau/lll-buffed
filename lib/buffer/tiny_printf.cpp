@@ -118,7 +118,7 @@ int tiny_snprintf(char *buf, const size_t size, const char *fmt, ...) {
   return r;
 }
 
-static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *outexp) {
+static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_t *outnum, unsigned int *outexp) {
   bool neg = false;
   *outnum = 0;
   *outexp = 0;
@@ -137,6 +137,9 @@ static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *out
   bool decimal = false;
   while ((*str >= '0' && *str <= '9') || *str == '.') {
     if (*str == '.') {
+      if (!expect_decimals) {
+        break;
+      }
       decimal = true;
     } else {
       if (decimal) {
@@ -155,14 +158,14 @@ static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *out
 unsigned int tiny_strtoul(const char *str) {
   int32_t num;
   unsigned int exp;
-  tiny_strtod_impl(str, &num, &exp);
+  tiny_strtod_impl(str, false, &num, &exp);
   return static_cast<unsigned int>(num);
 }
 
 float tiny_strtof(const char *str) {
   int32_t num;
   unsigned int exp;
-  tiny_strtod_impl(str, &num, &exp);
+  tiny_strtod_impl(str, true, &num, &exp);
   auto f = static_cast<double>(num);
   while (exp--)
     f /= 10.0;
