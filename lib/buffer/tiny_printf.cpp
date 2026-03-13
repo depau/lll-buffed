@@ -84,9 +84,6 @@ int tiny_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
     case 'u':
       out_uint(p, rem, va_arg(ap, unsigned), 10, count);
       break;
-    case 'x':
-      out_uint(p, rem, va_arg(ap, unsigned), 16, count);
-      break;
     case 's':
       out_str(p, rem, va_arg(ap, const char *), count);
       break;

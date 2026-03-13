@@ -574,7 +574,7 @@ private:
       lastMultiPressCount = multiPressCount;
     }
     if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
-      hw.writeLineF("speed=%.2f", speedMmS);
+      hw.writeLineF("speed=%f", speedMmS);
       lastSpeedMmS = speedMmS;
     }
 #endif
