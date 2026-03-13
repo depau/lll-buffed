@@ -285,7 +285,7 @@ TEST(BufferLogic, PresenceReporting) {
   }));
 }
 
-TEST(BufferLogic, RegularModeFilamentRunout) {
+TEST(BufferLogic, RegularModeFilamentRunoutWhileHolding) {
   Buffer<FakeHardware> buf;
   FakeHardware &hw = buf.getHardware();
   hw.presence = true;
@@ -370,6 +370,70 @@ TEST(BufferLogic, RegularModeFilamentRunout) {
     return line.find("mode=regular") != std::string::npos;
   }));
 }
+
+TEST(BufferLogic, RegularModeFilamentRunoutWhilePushing) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  hw.opt1 = true;
+  buf.init();
+  hw.serialSend("set_emptying_timeout 5000\n");
+  buf.loop();
+
+  SCOPED_TRACE("The buffer should be in regular mode with the motor pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.opt1 = false;
+  hw.opt2 = false;
+  hw.opt3 = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should keep pushing since the spring is still tensioned, else we wouldn't have left opt1");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  SCOPED_TRACE("Filament runout, with no sensor triggered");
+  hw.presence = false;
+  hw.now += 100;
+  buf.loop();
+  hw.now += 100;
+  buf.loop();
+
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Emptying);
+
+  SCOPED_TRACE("Should keep pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.opt1 = false;
+  hw.opt2 = true;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start holding");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold);
+
+  hw.opt1 = true;
+  hw.opt2 = false;
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should start pushing");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.now += 4999;
+  buf.loop();
+
+  SCOPED_TRACE("Should still be pushing since the timeout is not elapsed");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
+
+  hw.now += 100;
+  buf.loop();
+
+  SCOPED_TRACE("Should be back in regular mode, with the motor off since there's no filament");
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
+  EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
+}
+
 
 TEST(BufferLogic, EmptyingModeTimeout) {
   Buffer<FakeHardware> buf;

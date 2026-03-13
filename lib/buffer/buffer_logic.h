@@ -530,7 +530,7 @@ private:
     }
 
     // Work similarly to regular mode
-    if (hw.optical1()) {
+    if (hw.optical1() || (motor == Motor::Push && !hw.optical1() && !hw.optical2() && !hw.optical3())) {
       if (motor != Motor::Push || emptyingPushStart == 0) {
         emptyingPushStart = hw.timeMs();
       }
