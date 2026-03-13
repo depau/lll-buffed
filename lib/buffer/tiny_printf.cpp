@@ -123,7 +123,7 @@ static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_
   *outnum = 0;
   *outexp = 0;
 
-  while (*str == ' ' || *str == '\t') {
+  while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\r') {
     ++str;
   }
 
