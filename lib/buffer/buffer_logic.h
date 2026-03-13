@@ -246,7 +246,7 @@ private:
       setMotor(Motor::Off);
     } else if (strcmp(cmd, "query") == 0 || strcmp(cmd, "q") == 0) {
       updateStatus(true);
-    } else if (startsWith(cmd, "move") || startsWith(cmd, "m ")) {
+    } else if (startsWith(cmd, "move", nullptr) || startsWith(cmd, "m ", nullptr)) {
       if (const char *space = strchr(cmd, ' ')) {
         if (const float val = tiny_strtof(space + 1); val != 0.0f && speedMmS > 0.0f) {
           moveDir = val > 0 ? Motor::Push : Motor::Retract;
@@ -256,19 +256,19 @@ private:
           setMotor(moveDir);
         }
       }
-    } else if (startsWith(cmd, "set_", "timeout")) {
+    } else if (startsWith(cmd, "set_", "timeout", nullptr)) {
       timeoutMs = tiny_strtoul(cmd + 12);
-    } else if (startsWith(cmd, "set_", "hold_", "timeout")) {
-      if (startsWith(cmd, "set_", "hold_", "timeout", "_en")) {
+    } else if (startsWith(cmd, "set_", "hold_", "timeout", nullptr)) {
+      if (startsWith(cmd, "set_", "hold_", "timeout", "_en", nullptr)) {
         holdTimeoutEnabled = static_cast<bool>(tiny_strtoul(cmd + 25));
       } else {
         holdTimeoutMs = tiny_strtoul(cmd + 17);
       }
-    } else if (startsWith(cmd, "set_", "multi_press_count")) {
+    } else if (startsWith(cmd, "set_", "multi_press_count", nullptr)) {
       multiPressCount = static_cast<uint8_t>(tiny_strtoul(cmd + 22));
-    } else if (startsWith(cmd, "set_", "speed")) {
+    } else if (startsWith(cmd, "set_", "speed", nullptr)) {
       speedMmS = tiny_strtof(cmd + 10);
-    } else if (startsWith(cmd, "set_", "emptying_", "timeout")) {
+    } else if (startsWith(cmd, "set_", "emptying_", "timeout", nullptr)) {
       emptyingPushTimeoutMs = tiny_strtoul(cmd + 24);
     }
     updateStatus();

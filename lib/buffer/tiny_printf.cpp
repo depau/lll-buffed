@@ -123,8 +123,9 @@ static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *out
   *outnum = 0;
   *outexp = 0;
 
-  while (*str == ' ' || *str == '\t')
+  while (*str == ' ' || *str == '\t') {
     ++str;
+  }
 
   if (*str == '-') {
     neg = true;
@@ -135,16 +136,20 @@ static void tiny_strtod_impl(const char *str, int32_t *outnum, unsigned int *out
 
   bool decimal = false;
   while ((*str >= '0' && *str <= '9') || *str == '.') {
-    if (*str == '.')
+    if (*str == '.') {
       decimal = true;
-    else if (decimal)
-      *outexp += 1;
-    *outnum = *outnum * 10 + (*str - '0');
+    } else {
+      if (decimal) {
+        *outexp += 1;
+      }
+      *outnum = *outnum * 10 + (*str - '0');
+    }
     ++str;
   }
 
-  if (neg)
+  if (neg) {
     *outnum = -*outnum;
+  }
 }
 
 unsigned int tiny_strtoul(const char *str) {
