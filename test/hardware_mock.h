@@ -6,6 +6,8 @@
 #include <string>
 #include <vector>
 
+#include "tiny_printf.hpp"
+
 // FakeHardware does not inherit from BufferHardware anymore because BufferHardware is now a concrete class.
 // It implements the same implicit interface required by the Buffer template.
 
@@ -55,7 +57,7 @@ public:
     char buf[BufSize + 1];
     va_list args;
     va_start(args, fmt);
-    vsnprintf(buf, BufSize, fmt, args);
+    tiny_vsnprintf(buf, BufSize, fmt, args);
     va_end(args);
     writeLine(buf);
   }
