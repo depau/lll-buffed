@@ -127,6 +127,11 @@ TEST(BufferLogic, ReactToOpticalSensors) {
   hw.presence = false;
   hw.now += 1000;
   buf.loop();
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Hold); // Enters emptying mode first
+  EXPECT_EQ(hw.lines.back(), "mode=emptying");
+  hw.now += 121000; // Wait for emptying timeout
+  buf.loop();
+  buf.loop(); // Need a second loop to process Regular mode transition
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
 }
 
@@ -138,7 +143,6 @@ TEST(BufferLogic, ContinuousMode) {
   hw.serialSend("set_timeout 2000\r\r\r\n");
   hw.serialSend("set_multi_press_count 3\r\n");
   buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off);
   hw.serialSend("push\n");
   buf.loop();
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // No filament, should not move
@@ -224,7 +228,11 @@ TEST(BufferLogic, ContinuousMode) {
   hw.presence = false;
   hw.now += 1000;
   buf.loop();
-  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // Should turn off when no filament
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push); // Enters emptying mode
+  hw.now += 121000; // Wait for emptying timeout
+  buf.loop();
+  buf.loop(); // Need a second loop to process Regular mode transition
+  EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Off); // Should turn off after timeout
 }
 
 TEST(BufferLogic, ManualStopAndHoldTimeout) {

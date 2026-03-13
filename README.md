@@ -66,6 +66,8 @@ to reapply them after a power cycle.
   minute 30 seconds).
 - `set_hold_timeout <MS>`: Set the hold timeout in milliseconds. Default is 10000 (10 seconds).
 - `set_hold_timeout_en <0|1>`: Enable or disable the hold timeout (power save mode). Default is 0 (disabled).
+- `set_emptying_timeout <MS>`: Set the timeout after which the buffer will shut down when no filament is detected.
+  Default is 5000 (5 seconds).
 - `set_multi_press_count <N>`: Set the number of button presses required to enter continuous run mode. Default is 2.
 - `set_speed <MM/S>`: Set the speed of the motor in millimeters per second. Default is 30.
 
@@ -78,6 +80,7 @@ following:
   - `move_command`: Move for a fixed distance issued by the host.
   - `hold`: Filament held in place with the motor enabled, ignoring sensor inputs.
   - `manual`: Motor controlled directly by a held button.
+  - `emptying`: The buffer is waiting for the last bit of filament to be pushed out after the filament has run out.
 - `status=<status>`: The current status of the motor. Possible values are:
   - `push`: Filament pushed forward.
   - `retract`: Filament retracted.
@@ -88,6 +91,7 @@ following:
 - `timeout=<MS>`: The current configured timeout in milliseconds.
 - `hold_timeout=<MS>`: The current configured hold timeout in milliseconds (power save mode).
 - `hold_timeout_en=<0|1>`: Whether the hold timeout (power save mode) is enabled.
+- `emptying_timeout=<MS>`: The current configured emptying timeout in milliseconds.
 - `multi_press_count=<N>`: The number of button presses required to enter continuous run mode.
 - `speed=<MM/S>`: The current speed of the motor in millimeters per second.
 

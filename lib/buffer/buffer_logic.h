@@ -54,7 +54,8 @@ class Buffer {
     Continuous,
     MoveCommand,
     Hold,
-    Manual
+    Manual,
+    Emptying
   };
   enum class Motor : uint8_t {
     Off = 0,
@@ -78,6 +79,7 @@ class Buffer {
   bool holdTimeoutEnabled{ false };
   uint8_t multiPressCount{ 2 };
   float speedMmS{ 30.0f };
+  uint32_t emptyingPushTimeoutMs{ 5000 };
 
   bool filamentPresent{ false };
   bool timedOut{ false };
@@ -95,6 +97,8 @@ class Buffer {
   uint32_t moveStart{ 0 };
   uint32_t holdStart{ 0 };
   uint32_t continuousStart{ 0 };
+  uint32_t emptyingStart{ 0 };
+  uint32_t emptyingPushStart{ 0 };
 
   Mode lastMode{ Mode::Regular };
   Motor lastMotor{ Motor::Off };
@@ -106,6 +110,7 @@ class Buffer {
   bool lastHoldTimeoutEnabled{ false };
   uint32_t lastMultiPressCount{ 0 };
   float lastSpeedMmS{ 0.0f };
+  uint32_t lastEmptyingPushTimeoutMs{ 0 };
 
 public:
   Buffer() = default;
@@ -139,6 +144,9 @@ public:
     switch (mode) {
     case Mode::Regular:
       handleRegular();
+      break;
+    case Mode::Emptying:
+      handleEmptying();
       break;
     case Mode::MoveCommand:
       handleMoveCommand();
@@ -215,10 +223,14 @@ private:
 
   void handleUartCommand(const char *cmd) {
     if (strcmp(cmd, "push") == 0 || strcmp(cmd, "p") == 0) {
+      if (!hw.filamentPresent())
+        return;
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Push);
     } else if (strcmp(cmd, "retract") == 0 || strcmp(cmd, "r") == 0) {
+      if (!hw.filamentPresent())
+        return;
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Retract);
@@ -252,14 +264,12 @@ private:
       } else {
         holdTimeoutMs = tiny_strtoul(cmd + 17);
       }
-    } else if (startsWith(cmd, "set_multi_press_count")) {
-      multiPressCount = static_cast<uint8_t>(strtoul(cmd + 21, nullptr, 10));
-    } else if (startsWith(cmd, "set_speed")) {
-      speedMmS = strtof(cmd + 9, nullptr);
     } else if (startsWith(cmd, "set_", "multi_press_count")) {
       multiPressCount = static_cast<uint8_t>(tiny_strtoul(cmd + 22));
     } else if (startsWith(cmd, "set_", "speed")) {
       speedMmS = tiny_strtof(cmd + 10);
+    } else if (startsWith(cmd, "set_", "emptying_", "timeout")) {
+      emptyingPushTimeoutMs = tiny_strtoul(cmd + 24);
     }
     updateStatus();
   }
@@ -377,11 +387,15 @@ private:
   void handleI2CCommand(const uint8_t cmd) {
     switch (cmd) {
     case CMD_PUSH:
+      if (!hw.filamentPresent())
+        break;
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Push);
       break;
     case CMD_RETRACT:
+      if (!hw.filamentPresent())
+        break;
       mode = Mode::Continuous;
       continuousStart = hw.timeMs();
       setMotor(Motor::Retract);
@@ -430,9 +444,11 @@ private:
       }
       s.lastRelease = now;
       if (s.count >= multiPressCount) {
-        mode = Mode::Continuous;
-        continuousStart = now;
-        setMotor(dir);
+        if (hw.filamentPresent()) {
+          mode = Mode::Continuous;
+          continuousStart = now;
+          setMotor(dir);
+        }
         s.count = 0;
         return;
       }
@@ -464,8 +480,14 @@ private:
     if (!hw.filamentPresent()) {
       hw.setPresenceLed(false);
       hw.setPresenceOutput(false);
-      setMotor(Motor::Off);
-      timedOut = false;
+      if (lastFilament) {
+        mode = Mode::Emptying;
+        emptyingStart = hw.timeMs();
+        emptyingPushStart = 0;
+      } else {
+        setMotor(Motor::Off);
+        timedOut = false;
+      }
       return;
     }
     hw.setPresenceLed(true);
@@ -498,6 +520,44 @@ private:
     }
   }
 
+  void handleEmptying() {
+    if (hw.filamentPresent()) {
+      mode = Mode::Regular;
+      return;
+    }
+
+    if (hw.timeMs() - emptyingStart > timeoutMs) {
+      mode = Mode::Regular;
+      setMotor(Motor::Off);
+      return;
+    }
+
+    bool move = false;
+    if (hw.optical1()) {
+      if (motor != Motor::Push || emptyingPushStart == 0) {
+        emptyingPushStart = hw.timeMs();
+      }
+      setMotor(Motor::Push);
+      move = true;
+    } else if (hw.optical3()) {
+      setMotor(Motor::Retract);
+      emptyingPushStart = 0;
+      move = true;
+    } else if (hw.optical2()) {
+      setMotor(Motor::Hold);
+      emptyingPushStart = 0;
+    }
+
+    // If we've been pushing without moving for a while, assume the tail of the filament has left the gear and
+    // therefore the spring is no longer under tension
+    if (motor == Motor::Push) {
+      if (!move && emptyingPushTimeoutMs > 0 && hw.timeMs() - emptyingPushStart > emptyingPushTimeoutMs) {
+        mode = Mode::Regular;
+        setMotor(Motor::Off);
+      }
+    }
+  }
+
   void handleMoveCommand() {
     if (hw.timeMs() >= moveEnd) {
       mode = hw.filamentPresent() ? Mode::Hold : Mode::Regular;
@@ -507,8 +567,9 @@ private:
 
   void handleContinuous() {
     if (!hw.filamentPresent()) {
-      mode = Mode::Regular;
-      setMotor(Motor::Off);
+      mode = Mode::Emptying;
+      emptyingStart = hw.timeMs();
+      emptyingPushStart = 0;
       return;
     }
     if (timeoutMs > 0 && hw.timeMs() - continuousStart > timeoutMs) {
@@ -550,6 +611,9 @@ private:
         break;
       case Mode::Manual:
         modeStr = "manual";
+        break;
+      case Mode::Emptying:
+        modeStr = "emptying";
         break;
       }
       hw.writeLineF("mode=%s", modeStr);
@@ -598,6 +662,10 @@ private:
       hw.writeLineF("%s=%f", "speed", speedMmS);
       lastSpeedMmS = speedMmS;
     }
+    if (lastEmptyingPushTimeoutMs != emptyingPushTimeoutMs || force) {
+      hw.writeLineF("%s%s=%u", "emptying_", "timeout", emptyingPushTimeoutMs);
+      lastEmptyingPushTimeoutMs = emptyingPushTimeoutMs;
+    }
 #endif
 #ifdef ENABLE_I2C_PROTOCOL
     bool changed = false;
@@ -618,6 +686,8 @@ private:
     if (lastMultiPressCount != multiPressCount || force)
       changed = true;
     if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force)
+      changed = true;
+    if (lastEmptyingPushTimeoutMs != emptyingPushTimeoutMs || force)
       changed = true;
 
     if (changed) {
