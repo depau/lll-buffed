@@ -118,10 +118,10 @@ int tiny_snprintf(char *buf, const size_t size, const char *fmt, ...) {
   return r;
 }
 
-static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_t *outnum, unsigned int *outexp) {
+static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_t &outnum, unsigned int &outexp) {
   bool neg = false;
-  *outnum = 0;
-  *outexp = 0;
+  outnum = 0;
+  outexp = 0;
 
   while (*str == ' ' || *str == '\t' || *str == '\n' || *str == '\r') {
     ++str;
@@ -143,29 +143,29 @@ static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_
       decimal = true;
     } else {
       if (decimal) {
-        *outexp += 1;
+        outexp += 1;
       }
-      *outnum = *outnum * 10 + (*str - '0');
+      outnum = outnum * 10 + (*str - '0');
     }
     ++str;
   }
 
   if (neg) {
-    *outnum = -*outnum;
+    outnum = -outnum;
   }
 }
 
 unsigned int tiny_strtoul(const char *str) {
   int32_t num;
   unsigned int exp;
-  tiny_strtod_impl(str, false, &num, &exp);
+  tiny_strtod_impl(str, false, num, exp);
   return static_cast<unsigned int>(num);
 }
 
 float tiny_strtof(const char *str) {
   int32_t num;
   unsigned int exp;
-  tiny_strtod_impl(str, true, &num, &exp);
+  tiny_strtod_impl(str, true, num, exp);
   auto f = static_cast<double>(num);
   while (exp--)
     f /= 10.0;
