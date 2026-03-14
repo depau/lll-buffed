@@ -36,8 +36,11 @@ usage() {
     echo "  status            - Read status"
     echo "  speed [val]       - Get or set speed (mm/s)"
     echo "  timeout [val]     - Get or set timeout (ms)"
-    echo "  timeout_en [val]  - Get or set timeout enabled"
+    echo "  emptying_timeout [val] - Get or set emptying timeout (ms)"
+    echo "  hold_timeout [val] - Get or set hold timeout (ms)"
+    echo "  timeout_en [val]  - Get or set hold timeout enabled"
     echo "  multi_press [val] - Get or set multi press count"
+    echo "  params            - Read all parameters"
     exit 1
 }
 
@@ -71,7 +74,13 @@ uint32_to_bytes() {
 
 # Helper to unpack bytes to float
 bytes_to_float() {
-    python3 -c "import struct; data=bytes([$1]); print(f'{struct.unpack(\"<f\", data)[0]:.2f}')"
+    python3 -c "import struct, sys; data=bytes(map(int, sys.argv[1:])); print(f'{struct.unpack(\"<f\", data)[0]:.2f}')" "$@"
+}
+uint32_to_bytes() {
+    python3 -c "import struct; print(' '.join(map(str, struct.pack('<I', int($1)))))"
+}
+bytes_to_uint32() {
+    python3 -c "import struct, sys; data=bytes(map(int, sys.argv[1:])); print(struct.unpack(\"<I\", data)[0])" "$@"
 }
 
 case "$CMD" in
@@ -100,7 +109,8 @@ case "$CMD" in
         # Read Status
         VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_STATUS")
         FILAMENT_PRESENT=$(($VAL & 0x01))
-        TIMED_OUT=$(($VAL & 0x02 >> 1))
+        TIMED_OUT=$(( ($VAL >> 1) & 0x01 ))
+        HOLD_TIMEOUT_EN=$(( ($VAL >> 2) & 0x01 ))
 
         printf "Status: (%s)\n" "$VAL"
         printf "  - Filament Present: %s\n" "$FILAMENT_PRESENT"
@@ -129,9 +139,36 @@ case "$CMD" in
         esac
         printf "Motor:  %s (%s)\n" "$VAL" "$MOT_NAME"
         ;;
+    params)
+        printf "--- Settings ---\n"
+        # Speed
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_SPEED" i 4 | cut -d: -f2)
+        printf "Speed:            %s mm/s\n" "$(bytes_to_float $VAL)"
+        
+        # Timeout
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_TIMEOUT" i 4 | cut -d: -f2)
+        printf "Timeout:          %s ms\n" "$(bytes_to_uint32 $VAL)"
+        
+        # Emptying Timeout
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_EMPTYING_TIMEOUT" i 4 | cut -d: -f2)
+        printf "Emptying Timeout: %s ms\n" "$(bytes_to_uint32 $VAL)"
+        
+        # Hold Timeout
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_HOLD_TIMEOUT" i 4 | cut -d: -f2)
+        printf "Hold Timeout:     %s ms\n" "$(bytes_to_uint32 $VAL)"
+        
+        # Hold Timeout En
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_HOLD_TIMEOUT_ENABLED")
+        printf "Hold Timeout En:  %s\n" "$VAL"
+        
+        # Multi-Press
+        VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_MULTI_PRESS_COUNT")
+        printf "Multi-Press:      %s\n" "$VAL"
+        ;;
     speed)
         if [ -z "$1" ]; then
-            i2cget -y "$BUS" "$ADDR" "$REG_PARAM_SPEED"
+            VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_SPEED" i 4 | cut -d: -f2)
+            bytes_to_float $VAL
         else
             BYTES=$(float_to_bytes "$1")
             i2cset -y "$BUS" "$ADDR" "$REG_PARAM_SPEED" $BYTES
@@ -139,10 +176,29 @@ case "$CMD" in
         ;;
     timeout)
         if [ -z "$1" ]; then
-            i2cget -y "$BUS" "$ADDR" "$REG_PARAM_TIMEOUT"
+            VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_TIMEOUT" i 4 | cut -d: -f2)
+            bytes_to_uint32 $VAL
         else
             BYTES=$(uint32_to_bytes "$1")
             i2cset -y "$BUS" "$ADDR" "$REG_PARAM_TIMEOUT" $BYTES
+        fi
+        ;;
+    emptying_timeout)
+        if [ -z "$1" ]; then
+            VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_EMPTYING_TIMEOUT" i 4 | cut -d: -f2)
+            bytes_to_uint32 $VAL
+        else
+            BYTES=$(uint32_to_bytes "$1")
+            i2cset -y "$BUS" "$ADDR" "$REG_PARAM_EMPTYING_TIMEOUT" $BYTES
+        fi
+        ;;
+    hold_timeout)
+        if [ -z "$1" ]; then
+            VAL=$(i2cget -y "$BUS" "$ADDR" "$REG_PARAM_HOLD_TIMEOUT" i 4 | cut -d: -f2)
+            bytes_to_uint32 $VAL
+        else
+            BYTES=$(uint32_to_bytes "$1")
+            i2cset -y "$BUS" "$ADDR" "$REG_PARAM_HOLD_TIMEOUT" $BYTES
         fi
         ;;
     timeout_en)

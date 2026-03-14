@@ -160,6 +160,42 @@ class Shell(cmd.Cmd):
         except ValueError:
             print("Invalid value")
 
+    def do_set_emptying_timeout(self, arg):
+        """Set emptying timeout (ms). Usage: set_emptying_timeout <val>"""
+        try:
+            val = int(arg)
+            self.buffer.set_uint32(REG_PARAM_EMPTYING_TIMEOUT, val)
+            print(f"Emptying timeout set to {val} ms")
+        except ValueError:
+            print("Invalid value")
+
+    def do_set_hold_timeout(self, arg):
+        """Set hold timeout (ms). Usage: set_hold_timeout <val>"""
+        try:
+            val = int(arg)
+            self.buffer.set_uint32(REG_PARAM_HOLD_TIMEOUT, val)
+            print(f"Hold timeout set to {val} ms")
+        except ValueError:
+            print("Invalid value")
+
+    def do_set_hold_timeout_en(self, arg):
+        """Enable/Disable hold timeout. Usage: set_hold_timeout_en <0|1>"""
+        try:
+            val = int(arg)
+            self.buffer.write_byte(REG_PARAM_HOLD_TIMEOUT_ENABLED, 1 if val else 0)
+            print(f"Hold timeout {'enabled' if val else 'disabled'}")
+        except ValueError:
+            print("Invalid value")
+
+    def do_set_multi_press(self, arg):
+        """Set multi-press count. Usage: set_multi_press <val>"""
+        try:
+            val = int(arg)
+            self.buffer.write_byte(REG_PARAM_MULTI_PRESS_COUNT, val)
+            print(f"Multi-press count set to {val}")
+        except ValueError:
+            print("Invalid value")
+
     def do_status(self, arg):
         """Print current device status"""
         # Read all status registers
@@ -196,13 +232,17 @@ class Shell(cmd.Cmd):
         """Read all parameters"""
         speed = self.buffer.get_float(REG_PARAM_SPEED)
         timeout = self.buffer.get_uint32(REG_PARAM_TIMEOUT)
+        e_timeout = self.buffer.get_uint32(REG_PARAM_EMPTYING_TIMEOUT)
         hold_timeout = self.buffer.get_uint32(REG_PARAM_HOLD_TIMEOUT)
+        hold_to_en = bool(self.buffer.read_byte(REG_PARAM_HOLD_TIMEOUT_ENABLED))
         mp_count = self.buffer.read_byte(REG_PARAM_MULTI_PRESS_COUNT)
         
         print("--- Parameters ---")
         print(f"Speed:            {speed:.2f} mm/s")
         print(f"Timeout:          {timeout} ms")
+        print(f"Emptying Timeout: {e_timeout} ms")
         print(f"Hold Timeout:     {hold_timeout} ms")
+        print(f"Hold Timeout En:  {hold_to_en}")
         print(f"Multi-Press:      {mp_count}")
 
     def do_exit(self, arg):
