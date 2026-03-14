@@ -31,6 +31,7 @@ enum I2CRegister : uint8_t {
   REG_PARAM_HOLD_TIMEOUT = 0x10,
   REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x14,
   REG_PARAM_MULTI_PRESS_COUNT = 0x15,
+  REG_PARAM_EMPTYING_TIMEOUT = 0x16,
 };
 
 enum I2CCommand : uint8_t {
@@ -332,6 +333,9 @@ private:
     case REG_PARAM_MULTI_PRESS_COUNT:
       hw.i2cWrite(multiPressCount);
       break;
+    case REG_PARAM_EMPTYING_TIMEOUT:
+      hw.i2cWriteValue(emptyingPushTimeoutMs);
+      break;
     default:
       hw.i2cWrite(0);
       break;
@@ -386,6 +390,12 @@ private:
     case REG_PARAM_MULTI_PRESS_COUNT:
       if (size >= sizeof(multiPressCount)) {
         reinterpret_assign(multiPressCount, data);
+        updateStatus();
+      }
+      break;
+    case REG_PARAM_EMPTYING_TIMEOUT:
+      if (size >= sizeof(emptyingPushTimeoutMs)) {
+        reinterpret_assign(emptyingPushTimeoutMs, data);
         updateStatus();
       }
       break;

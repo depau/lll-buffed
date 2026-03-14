@@ -655,6 +655,8 @@ TEST(BufferLogic, I2CSettings) {
   writeParam(REG_PARAM_HOLD_TIMEOUT_ENABLED, (uint8_t) 1);
   // Set Multi Press Count: 10
   writeParam(REG_PARAM_MULTI_PRESS_COUNT, (uint8_t) 10);
+  // Set Emptying Timeout: 4567u
+  writeParam(REG_PARAM_EMPTYING_TIMEOUT, 4567u);
 
   buf.loop();
 
@@ -682,4 +684,9 @@ TEST(BufferLogic, I2CSettings) {
   auto multiPressData = readParam(REG_PARAM_MULTI_PRESS_COUNT);
   ASSERT_EQ(multiPressData.size(), 1);
   EXPECT_EQ(multiPressData[0], 10);
+
+  // Verify Emptying Timeout
+  auto emptyingTimeoutData = readParam(REG_PARAM_EMPTYING_TIMEOUT);
+  ASSERT_EQ(emptyingTimeoutData.size(), sizeof(uint32_t));
+  EXPECT_EQ(*reinterpret_cast<uint32_t *>(emptyingTimeoutData.data()), 4567u);
 }

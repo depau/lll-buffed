@@ -159,6 +159,7 @@ The **Interrupt Line (INT)** is asserted (pulled LOW) by the buffer whenever its
 | **HOLD_TIMEOUT**    | `0x10`  | R/W | Hold timeout in ms (Uint32, 4 bytes)                                             |
 | **HOLD_TIMEOUT_EN** | `0x14`  | R/W | Enable hold timeout (1 byte, 0 or 1)                                             |
 | **MULTI_PRESS**     | `0x15`  | R/W | Multi-press count (1 byte)                                                       |
+| **EMPTYING_TIMEOUT**| `0x16`  | R/W | Emptying push timeout in ms (Uint32, 4 bytes)                                    |
 
 **Example Transaction:**
 
