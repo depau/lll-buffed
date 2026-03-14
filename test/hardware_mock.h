@@ -3,6 +3,7 @@
 #include <cstdarg>
 #include <cstdint>
 #include <cstdio>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -35,6 +36,7 @@ public:
 
   static void loop() {}
   static void initHardware() {}
+  [[noreturn]] static void rebootDFU() { throw std::runtime_error("Reboot to DFU called"); }
 
   bool optical1() const { return opt1; }
   bool optical2() const { return opt2; }

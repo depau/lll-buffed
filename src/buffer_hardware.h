@@ -2,9 +2,11 @@
 
 #include <Arduino.h>
 #include <TMCStepper.h>
+#include <USBSerial.h>
 #include <cstdarg>
 #include <cstdio>
 
+#include "dfu.hpp"
 #include "tiny_printf.hpp"
 
 #ifdef ENABLE_I2C_PROTOCOL
@@ -167,12 +169,19 @@ public:
     driver.VACTUAL(0);
   }
 
+  [[noreturn]] static void rebootDFU() {
+    SerialUSB.end();
+    reboot_to_dfu();
+  }
+
 #ifdef ENABLE_UART_PROTOCOL
   static void writeLine(const char *l) {
     SerialUSB.write(l);
     SerialUSB.write('\n');
     Serial2.write(l);
     Serial2.write('\n');
+    SerialUSB.flush();
+    Serial2.flush();
   }
 
   template<size_t BufSize = 64>

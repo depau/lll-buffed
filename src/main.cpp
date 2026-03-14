@@ -1,5 +1,4 @@
 #include <Arduino.h>
-#include <USBSerial.h>
 
 #include "buffer_hardware.h"
 #include "buffer_logic.h"

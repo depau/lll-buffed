@@ -39,6 +39,7 @@ enum I2CCommand : uint8_t {
   CMD_HOLD = 2,
   CMD_PUSH = 3,
   CMD_RETRACT = 4,
+  CMD_REBOOT_DFU = 0xDF,
 };
 #endif
 
@@ -254,6 +255,9 @@ private:
       setMotor(Motor::Off);
     } else if (strcmp(cmd, "query") == 0 || strcmp(cmd, "q") == 0) {
       updateStatus(true);
+    } else if (strcmp(cmd, "reboot_dfu") == 0) {
+      hw.writeLineF("mode=dfu");
+      HW::rebootDFU();
     } else if (((arg = startsWith(cmd, "move ", nullptr))) || ((arg = startsWith(cmd, "m ", nullptr)))) {
       if (const float val = tiny_strtof(arg); val != 0.0f && speedMmS > 0.0f) {
         moveDir = val > 0 ? Motor::Push : Motor::Retract;
@@ -417,6 +421,10 @@ private:
     case CMD_OFF:
       setMode(Mode::Regular);
       setMotor(Motor::Off);
+      break;
+    case CMD_REBOOT_DFU:
+      hw.writeLineF("mode=dfu");
+      HW::rebootDFU();
       break;
     default:
       // Unknown command, ignore;
