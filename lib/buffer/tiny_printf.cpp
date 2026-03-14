@@ -156,15 +156,15 @@ static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_
 }
 
 unsigned int tiny_strtoul(const char *str) {
-  int32_t num;
-  unsigned int exp;
+  int32_t num = 0;
+  unsigned int exp = 0;
   tiny_strtod_impl(str, false, num, exp);
   return static_cast<unsigned int>(num);
 }
 
 float tiny_strtof(const char *str) {
-  int32_t num;
-  unsigned int exp;
+  int32_t num = 0;
+  unsigned int exp = 0;
   tiny_strtod_impl(str, true, num, exp);
   auto f = static_cast<double>(num);
   while (exp--)

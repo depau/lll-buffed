@@ -19,6 +19,14 @@ constexpr uint32_t SHORT_PRESS_MS = 150;
 constexpr uint32_t MULTI_PRESS_MIN_MS = 50;
 constexpr uint32_t MULTI_PRESS_MAX_MS = 500;
 
+constexpr uint32_t DEFAULT_TIMEOUT_MS = 90000;
+constexpr uint32_t DEFAULT_HOLD_TIMEOUT_MS = 10000;
+constexpr uint8_t DEFAULT_MULTI_PRESS_COUNT = 2;
+constexpr float DEFAULT_SPEED_MM_S = 30.0F;
+constexpr uint32_t DEFAULT_EMPTYING_PUSH_TIMEOUT_MS = 2500;
+
+constexpr size_t UART_CMD_BUF_SIZE = 64;
+
 #ifdef ENABLE_I2C_PROTOCOL
 enum I2CRegister : uint8_t {
   REG_COMMAND = 0x00,
@@ -79,12 +87,12 @@ private:
   Mode mode{ Mode::Regular };
   Motor motor{ Motor::Off };
 
-  uint32_t timeoutMs{ 90000 };
-  uint32_t holdTimeoutMs{ 10000 };
+  uint32_t timeoutMs{ DEFAULT_TIMEOUT_MS };
+  uint32_t holdTimeoutMs{ DEFAULT_HOLD_TIMEOUT_MS };
   bool holdTimeoutEnabled{ false };
-  uint8_t multiPressCount{ 2 };
-  float speedMmS{ 30.0f };
-  uint32_t emptyingPushTimeoutMs{ 2500 };
+  uint8_t multiPressCount{ DEFAULT_MULTI_PRESS_COUNT };
+  float speedMmS{ DEFAULT_SPEED_MM_S };
+  uint32_t emptyingPushTimeoutMs{ DEFAULT_EMPTYING_PUSH_TIMEOUT_MS };
 
   bool filamentPresent{ false };
   bool timedOut{ false };
@@ -92,7 +100,7 @@ private:
   ButtonState btnFwd;
   ButtonState btnBack;
 
-  char cmdBuf[64]{};
+  char cmdBuf[UART_CMD_BUF_SIZE]{};
   size_t cmdLen{ 0 };
   uint32_t lastCharTime{ 0 };
 
@@ -114,7 +122,7 @@ private:
   uint32_t lastHoldTimeoutMs{ 0 };
   bool lastHoldTimeoutEnabled{ false };
   uint32_t lastMultiPressCount{ 0 };
-  float lastSpeedMmS{ 0.0f };
+  float lastSpeedMmS{ 0.0F };
   uint32_t lastEmptyingPushTimeoutMs{ 0 };
 
 public:
@@ -184,7 +192,7 @@ public:
 private:
 #ifdef ENABLE_UART_PROTOCOL
   void processUartCommands() {
-    char c;
+    char c = '\0';
     while (hw.readChar(c)) {
       if (c == '\r') {
         continue;
@@ -260,9 +268,9 @@ private:
       hw.writeLineF("mode=dfu");
       HW::rebootDFU();
     } else if (((arg = startsWith(cmd, "move ", nullptr))) || ((arg = startsWith(cmd, "m ", nullptr)))) {
-      if (const float val = tiny_strtof(arg); val != 0.0f && speedMmS > 0.0f) {
+      if (const float val = tiny_strtof(arg); val != 0.0F && speedMmS > 0.0F) {
         moveDir = val > 0 ? Motor::Push : Motor::Retract;
-        const float ms = std::fabs(val) * 1000.0f / speedMmS;
+        const float ms = std::fabs(val) * 1000.0F / speedMmS;
         moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
         setMode(Mode::MoveCommand);
         setMotor(moveDir);
@@ -353,9 +361,9 @@ private:
     case REG_MOVE_DIST:
       if (size >= sizeof(float)) {
         const auto dist = *reinterpret_cast<const float *>(data);
-        if (dist != 0.0f && speedMmS > 0.0f) {
+        if (dist != 0.0F && speedMmS > 0.0F) {
           moveDir = dist > 0 ? Motor::Push : Motor::Retract;
-          const float ms = std::fabs(dist) * 1000.0f / speedMmS;
+          const float ms = std::fabs(dist) * 1000.0F / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
           setMode(Mode::MoveCommand);
           setMotor(moveDir);
@@ -674,8 +682,8 @@ private:
       hw.writeLineF("%s=%u", "multi_press_count", multiPressCount);
       lastMultiPressCount = multiPressCount;
     }
-    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force) {
-      hw.writeLineF("%s=%f", "speed", speedMmS);
+    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01F || force) {
+      hw.writeLineF("speed=%f", speedMmS);
       lastSpeedMmS = speedMmS;
     }
     if (lastEmptyingPushTimeoutMs != emptyingPushTimeoutMs || force) {
@@ -701,7 +709,7 @@ private:
       changed = true;
     if (lastMultiPressCount != multiPressCount || force)
       changed = true;
-    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01f || force)
+    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01F || force)
       changed = true;
     if (lastEmptyingPushTimeoutMs != emptyingPushTimeoutMs || force)
       changed = true;
