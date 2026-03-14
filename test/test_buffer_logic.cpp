@@ -622,3 +622,64 @@ TEST(BufferLogic, I2CMoveCommand) {
     return line.find("mode=move_command") != std::string::npos;
   }));
 }
+
+TEST(BufferLogic, I2CSettings) {
+  Buffer<FakeHardware> buf;
+  FakeHardware &hw = buf.getHardware();
+  hw.presence = true;
+  buf.init();
+  buf.loop();
+
+  auto writeParam = [&](uint8_t reg, auto val) {
+    std::vector<uint8_t> frame;
+    frame.push_back(reg);
+    const uint8_t *p = reinterpret_cast<const uint8_t *>(&val);
+    for (size_t i = 0; i < sizeof(val); i++)
+      frame.push_back(p[i]);
+    hw.simulateI2CReceive(frame);
+  };
+
+  auto readParam = [&](uint8_t reg) {
+    hw.simulateI2CReceive({ reg });
+    hw.simulateI2CRequest();
+    return hw.i2cTxBuffer;
+  };
+
+  // Set Speed: 123.45f
+  writeParam(REG_PARAM_SPEED, 123.45f);
+  // Set Timeout: 123456u
+  writeParam(REG_PARAM_TIMEOUT, 123456u);
+  // Set Hold Timeout: 78901u
+  writeParam(REG_PARAM_HOLD_TIMEOUT, 78901u);
+  // Set Hold Timeout Enabled: 1
+  writeParam(REG_PARAM_HOLD_TIMEOUT_ENABLED, (uint8_t) 1);
+  // Set Multi Press Count: 10
+  writeParam(REG_PARAM_MULTI_PRESS_COUNT, (uint8_t) 10);
+
+  buf.loop();
+
+  // Verify Speed
+  auto speedData = readParam(REG_PARAM_SPEED);
+  ASSERT_EQ(speedData.size(), sizeof(float));
+  EXPECT_FLOAT_EQ(*reinterpret_cast<float *>(speedData.data()), 123.45f);
+
+  // Verify Timeout
+  auto timeoutData = readParam(REG_PARAM_TIMEOUT);
+  ASSERT_EQ(timeoutData.size(), sizeof(uint32_t));
+  EXPECT_EQ(*reinterpret_cast<uint32_t *>(timeoutData.data()), 123456u);
+
+  // Verify Hold Timeout
+  auto holdTimeoutData = readParam(REG_PARAM_HOLD_TIMEOUT);
+  ASSERT_EQ(holdTimeoutData.size(), sizeof(uint32_t));
+  EXPECT_EQ(*reinterpret_cast<uint32_t *>(holdTimeoutData.data()), 78901u);
+
+  // Verify Hold Timeout Enabled
+  auto holdTimeoutEnData = readParam(REG_PARAM_HOLD_TIMEOUT_ENABLED);
+  ASSERT_EQ(holdTimeoutEnData.size(), 1);
+  EXPECT_EQ(holdTimeoutEnData[0], 1);
+
+  // Verify Multi Press Count
+  auto multiPressData = readParam(REG_PARAM_MULTI_PRESS_COUNT);
+  ASSERT_EQ(multiPressData.size(), 1);
+  EXPECT_EQ(multiPressData[0], 10);
+}
