@@ -22,7 +22,7 @@ When making changes to the firmware you must ensure that the code is formatted c
 the source files. You can do this by running the following command in the root directory of the project:
 
 ```bash
-clang-format -i lib/**/*.cpp lib/**/*.h src/**/*.cpp
+clang-format -i lib/**/*.*pp src/**/*.*pp test/**/*.*pp
 ```
 
 You must also ensure the code builds correctly with PlatformIO. You can do this by running the following command in the

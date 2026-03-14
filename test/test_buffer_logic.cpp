@@ -2,8 +2,8 @@
 #include <gtest/gtest.h>
 #include <vector>
 
-#include "buffer_logic.h"
-#include "hardware_mock.h"
+#include "buffer_logic.hpp"
+#include "hardware_mock.hpp"
 
 TEST(BufferLogic, StartupWithoutFilament) {
   Buffer<FakeHardware> buf;
@@ -434,7 +434,6 @@ TEST(BufferLogic, RegularModeFilamentRunoutWhilePushing) {
   EXPECT_EQ(buf.getMode(), Buffer<FakeHardware>::Mode::Regular);
 }
 
-
 TEST(BufferLogic, EmptyingModeTimeout) {
   Buffer<FakeHardware> buf;
   FakeHardware &hw = buf.getHardware();
@@ -480,8 +479,8 @@ TEST(BufferLogic, ContinuousPushFilamentRunout) {
   SCOPED_TRACE("Filament runout");
   hw.presence = false;
   hw.now += 100;
-  buf.loop();  // Trigger emptying mode
-  buf.loop();  // Run emptying mode logic once
+  buf.loop(); // Trigger emptying mode
+  buf.loop(); // Run emptying mode logic once
 
   SCOPED_TRACE("Should keep pushing until the emptying mode timeout");
   EXPECT_EQ(hw.lastMotor, FakeHardware::TestMotor::Push);
@@ -521,7 +520,7 @@ TEST(BufferLogic, UARTSettings) {
   hw.presence = true;
   buf.init();
   buf.loop();
-  
+
   hw.serialSend("set_speed 123\n");
   hw.serialSend("set_timeout 12345\n");
   hw.serialSend("set_hold_timeout 5456\n");
