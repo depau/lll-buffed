@@ -22,16 +22,16 @@ constexpr uint32_t MULTI_PRESS_MAX_MS = 500;
 #ifdef ENABLE_I2C_PROTOCOL
 enum I2CRegister : uint8_t {
   REG_COMMAND = 0x00,
-  REG_STATUS = 0x01,
-  REG_MODE = 0x02,
-  REG_MOTOR = 0x03,
-  REG_MOVE_DIST = 0x04,
-  REG_PARAM_SPEED = 0x08,
-  REG_PARAM_TIMEOUT = 0x0C,
-  REG_PARAM_HOLD_TIMEOUT = 0x10,
-  REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x14,
-  REG_PARAM_MULTI_PRESS_COUNT = 0x15,
-  REG_PARAM_EMPTYING_TIMEOUT = 0x16,
+  REG_MOVE_DIST,
+  REG_STATUS,
+  REG_MODE,
+  REG_MOTOR,
+  REG_PARAM_SPEED,
+  REG_PARAM_TIMEOUT,
+  REG_PARAM_EMPTYING_TIMEOUT,
+  REG_PARAM_HOLD_TIMEOUT,
+  REG_PARAM_HOLD_TIMEOUT_ENABLED,
+  REG_PARAM_MULTI_PRESS_COUNT,
 };
 
 enum I2CCommand : uint8_t {
@@ -324,6 +324,9 @@ private:
     case REG_PARAM_TIMEOUT:
       hw.i2cWriteValue(timeoutMs);
       break;
+    case REG_PARAM_EMPTYING_TIMEOUT:
+      hw.i2cWriteValue(emptyingPushTimeoutMs);
+      break;
     case REG_PARAM_HOLD_TIMEOUT:
       hw.i2cWriteValue(holdTimeoutMs);
       break;
@@ -332,9 +335,6 @@ private:
       break;
     case REG_PARAM_MULTI_PRESS_COUNT:
       hw.i2cWrite(multiPressCount);
-      break;
-    case REG_PARAM_EMPTYING_TIMEOUT:
-      hw.i2cWriteValue(emptyingPushTimeoutMs);
       break;
     default:
       hw.i2cWrite(0);
@@ -375,6 +375,12 @@ private:
         updateStatus();
       }
       break;
+    case REG_PARAM_EMPTYING_TIMEOUT:
+      if (size >= sizeof(emptyingPushTimeoutMs)) {
+        reinterpret_assign(emptyingPushTimeoutMs, data);
+        updateStatus();
+      }
+      break;
     case REG_PARAM_HOLD_TIMEOUT:
       if (size >= sizeof(holdTimeoutMs)) {
         reinterpret_assign(holdTimeoutMs, data);
@@ -390,12 +396,6 @@ private:
     case REG_PARAM_MULTI_PRESS_COUNT:
       if (size >= sizeof(multiPressCount)) {
         reinterpret_assign(multiPressCount, data);
-        updateStatus();
-      }
-      break;
-    case REG_PARAM_EMPTYING_TIMEOUT:
-      if (size >= sizeof(emptyingPushTimeoutMs)) {
-        reinterpret_assign(emptyingPushTimeoutMs, data);
         updateStatus();
       }
       break;

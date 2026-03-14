@@ -558,9 +558,9 @@ TEST(BufferLogic, I2CCommandPush) {
   hw.presence = true;
   buf.init();
 
-  // Set Command: Push (0x03) to REG_COMMAND (0x00)
-  // [RegPtr=0x00] [Val=0x03]
-  std::vector<uint8_t> data = { 0x00, 0x03 };
+  // Set Command: Push (CMD_PUSH) to REG_COMMAND
+  // [RegPtr=REG_COMMAND] [Val=CMD_PUSH]
+  std::vector<uint8_t> data = { REG_COMMAND, CMD_PUSH };
   hw.simulateI2CReceive(data);
   hw.simulateI2CRequest(); // Simulate request to drain response if any (though command doesn't reply)
 
@@ -581,8 +581,8 @@ TEST(BufferLogic, I2CStatusRead) {
   buf.loop(); // Update status
   EXPECT_TRUE(hw.intActive);
 
-  // Read Status Register: Write Ptr 0x01
-  std::vector<uint8_t> ptr = { 0x01 };
+  // Read Status Register: Write Ptr REG_STATUS
+  std::vector<uint8_t> ptr = { REG_STATUS };
   hw.simulateI2CReceive(ptr);
 
   // Read Response
@@ -607,10 +607,10 @@ TEST(BufferLogic, I2CMoveCommand) {
   // Set Speed first (optional, default is 30)
 
   // Write Move Dist: 100.0mm
-  // Register 0x04
+  // Register REG_MOVE_DIST
   float dist = 100.0f;
   std::vector<uint8_t> frame;
-  frame.push_back(0x04); // REG_MOVE_DIST
+  frame.push_back(REG_MOVE_DIST);
   uint8_t *p = (uint8_t *) &dist;
   for (int i = 0; i < 4; i++)
     frame.push_back(p[i]);

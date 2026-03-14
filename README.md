@@ -150,16 +150,16 @@ The **Interrupt Line (INT)** is asserted (pulled LOW) by the buffer whenever its
 | Register            | Address | R/W | Description                                                                      |
 | :------------------ | :------ | :-- | :------------------------------------------------------------------------------- |
 | **COMMAND**         | `0x00`  | W   | Write command code: `0`=Off, `1`=Regular, `2`=Hold, `3`=Push, `4`=Retract        |
-| **STATUS**          | `0x01`  | R   | Status flags: `Bit0`=FilamentPresent, `Bit1`=TimedOut, `Bit2`=HoldTimeoutEnabled |
-| **MODE**            | `0x02`  | R   | Current Mode: `0`=Regular, `1`=Continuous, `2`=MoveCmd, `3`=Hold, `4`=Manual     |
-| **MOTOR**           | `0x03`  | R   | Motor State: `0`=Push, `1`=Retract, `2`=Hold, `3`=Off                            |
-| **MOVE_DIST**       | `0x04`  | W   | Write Float (4 bytes) to trigger a move (mm). Positive=Push, Negative=Retract.   |
-| **SPEED**           | `0x08`  | R/W | Motor speed in mm/s (Float, 4 bytes)                                             |
-| **TIMEOUT**         | `0x0C`  | R/W | Timeout in ms (Uint32, 4 bytes)                                                  |
-| **HOLD_TIMEOUT**    | `0x10`  | R/W | Hold timeout in ms (Uint32, 4 bytes)                                             |
-| **HOLD_TIMEOUT_EN** | `0x14`  | R/W | Enable hold timeout (1 byte, 0 or 1)                                             |
-| **MULTI_PRESS**     | `0x15`  | R/W | Multi-press count (1 byte)                                                       |
-| **EMPTYING_TIMEOUT**| `0x16`  | R/W | Emptying push timeout in ms (Uint32, 4 bytes)                                    |
+| **MOVE_DIST**       | `0x01`  | W   | Write Float (4 bytes) to trigger a move (mm). Positive=Push, Negative=Retract.   |
+| **STATUS**          | `0x02`  | R   | Status flags: `Bit0`=FilamentPresent, `Bit1`=TimedOut, `Bit2`=HoldTimeoutEnabled |
+| **MODE**            | `0x03`  | R   | Current Mode: `0`=Regular, `1`=Continuous, `2`=MoveCmd, `3`=Hold, `4`=Manual     |
+| **MOTOR**           | `0x04`  | R   | Motor State: `0`=Push, `1`=Retract, `2`=Hold, `3`=Off                            |
+| **SPEED**           | `0x05`  | R/W | Motor speed in mm/s (Float, 4 bytes)                                             |
+| **TIMEOUT**         | `0x06`  | R/W | Timeout in ms (Uint32, 4 bytes)                                                  |
+| **EMPTYING_TIMEOUT**| `0x07`  | R/W | Emptying push timeout in ms (Uint32, 4 bytes)                                    |
+| **HOLD_TIMEOUT**    | `0x08`  | R/W | Hold timeout in ms (Uint32, 4 bytes)                                             |
+| **HOLD_TIMEOUT_EN** | `0x09`  | R/W | Enable hold timeout (1 byte, 0 or 1)                                             |
+| **MULTI_PRESS**     | `0x0A`  | R/W | Multi-press count (1 byte)                                                       |
 
 **Example Transaction:**
 
