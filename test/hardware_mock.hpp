@@ -76,9 +76,9 @@ public:
   void serialSend(const std::string &line) { input.insert(input.end(), line.begin(), line.end()); }
 
 #ifdef ENABLE_I2C_PROTOCOL
-  void (*requestCb)(void *, uint8_t){ nullptr };
+  size_t (*onI2CRead)(void *, uint8_t){ nullptr };
+  void (*onI2CWrite)(void *, uint8_t, size_t, const uint8_t *){ nullptr };
   void *requestCtx{ nullptr };
-  void (*receiveCb)(void *, uint8_t, size_t, const uint8_t *){ nullptr };
   void *receiveCtx{ nullptr };
   uint8_t lastReg{ 0 };
   bool intActive{ false };
@@ -86,34 +86,43 @@ public:
   // i2cRxBuffer no longer needed for buffering, we pass directly
 
   void setI2CCallbacks(void *ctx,
-                       void (*onRead)(void *ctx, uint8_t reg),
+                       size_t (*onRead)(void *ctx, uint8_t reg),
                        void (*onWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data)) {
     requestCtx = ctx;
-    requestCb = onRead;
+    onI2CRead = onRead;
     receiveCtx = ctx;
-    receiveCb = onWrite;
+    onI2CWrite = onWrite;
   }
   void setInterrupt(bool active) { intActive = active; }
-  void i2cWrite(uint8_t data) { i2cTxBuffer.push_back(data); }
-  void i2cWriteBuffer(const uint8_t *data, size_t len) { i2cTxBuffer.insert(i2cTxBuffer.end(), data, data + len); }
+
+  size_t i2cWrite(uint8_t data) {
+    i2cTxBuffer.push_back(data);
+    return 1;
+  }
+
+  size_t i2cWriteBuffer(const uint8_t *data, size_t len) {
+    i2cTxBuffer.insert(i2cTxBuffer.end(), data, data + len);
+    return len;
+  }
 
   template<typename T>
-  void i2cWriteValue(const T &value) {
+  size_t i2cWriteValue(const T &value) {
     i2cWriteBuffer(reinterpret_cast<const uint8_t *>(&value), sizeof(T));
+    return sizeof(T);
   }
 
   // Helpers to simulate I2C events
   void simulateI2CRequest() {
-    if (requestCb) {
+    if (onI2CRead) {
       i2cTxBuffer.clear();
-      requestCb(requestCtx, lastReg);
+      onI2CRead(requestCtx, lastReg);
     }
   }
   void simulateI2CReceive(const std::vector<uint8_t> &data) {
-    if (receiveCb && !data.empty()) {
+    if (onI2CWrite && !data.empty()) {
       lastReg = data[0];
       if (data.size() > 1) {
-        receiveCb(receiveCtx, lastReg, data.size() - 1, &data[1]);
+        onI2CWrite(receiveCtx, lastReg, data.size() - 1, &data[1]);
       }
     }
   }

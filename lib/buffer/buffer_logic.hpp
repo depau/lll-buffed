@@ -1,6 +1,7 @@
 #pragma once
 
 #include <cmath>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 
@@ -296,9 +297,10 @@ private:
 #endif
 
 #ifdef ENABLE_I2C_PROTOCOL
-  static void onI2CReadTrampoline(void *ctx, const uint8_t reg) {
+  static size_t onI2CReadTrampoline(void *ctx, const uint8_t reg) {
     if (auto *self = static_cast<Buffer *>(ctx))
-      self->onI2CRead(reg);
+      return self->onI2CRead(reg);
+    return 0;
   }
 
   static void onI2CWriteTrampoline(void *ctx, const uint8_t reg, const size_t size, const uint8_t *data) {
@@ -306,7 +308,7 @@ private:
       self->onI2CWrite(reg, size, data);
   }
 
-  void onI2CRead(const uint8_t reg) {
+  size_t onI2CRead(const uint8_t reg) {
     if (reg == REG_STATUS)
       hw.setInterrupt(false);
 
@@ -317,36 +319,26 @@ private:
         status |= 0x01;
       if (timedOut)
         status |= 0x02;
-      hw.i2cWrite(status);
-      break;
+      return hw.i2cWrite(status);
     }
     case REG_MODE:
-      hw.i2cWrite(static_cast<uint8_t>(mode));
-      break;
+      return hw.i2cWrite(static_cast<uint8_t>(mode));
     case REG_MOTOR:
-      hw.i2cWrite(static_cast<uint8_t>(motor));
-      break;
+      return hw.i2cWrite(static_cast<uint8_t>(motor));
     case REG_PARAM_SPEED:
-      hw.i2cWriteValue(speedMmS);
-      break;
+      return hw.i2cWriteValue(speedMmS);
     case REG_PARAM_TIMEOUT:
-      hw.i2cWriteValue(timeoutMs);
-      break;
+      return hw.i2cWriteValue(timeoutMs);
     case REG_PARAM_EMPTYING_TIMEOUT:
-      hw.i2cWriteValue(emptyingPushTimeoutMs);
-      break;
+      return hw.i2cWriteValue(emptyingPushTimeoutMs);
     case REG_PARAM_HOLD_TIMEOUT:
-      hw.i2cWriteValue(holdTimeoutMs);
-      break;
+      return hw.i2cWriteValue(holdTimeoutMs);
     case REG_PARAM_HOLD_TIMEOUT_ENABLED:
-      hw.i2cWrite(holdTimeoutEnabled ? 1 : 0);
-      break;
+      return hw.i2cWrite(holdTimeoutEnabled ? 1 : 0);
     case REG_PARAM_MULTI_PRESS_COUNT:
-      hw.i2cWrite(multiPressCount);
-      break;
+      return hw.i2cWrite(multiPressCount);
     default:
-      hw.i2cWrite(0);
-      break;
+      return hw.i2cWrite(0);
     }
   }
 

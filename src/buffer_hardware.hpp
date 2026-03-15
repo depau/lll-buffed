@@ -50,7 +50,7 @@ class BufferHardware {
 
 #ifdef ENABLE_I2C_PROTOCOL
   static inline void *i2cContext = nullptr;
-  static inline void (*onI2CRead)(void *ctx, uint8_t reg) = nullptr;
+  static inline size_t (*onI2CRead)(void *ctx, uint8_t reg) = nullptr;
   static inline void (*onI2CWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data) = nullptr;
   static inline volatile uint8_t pendingReadRegister = -1;
   static inline volatile unsigned int incomingI2CBytes = 0;
@@ -58,7 +58,7 @@ class BufferHardware {
 
   static void onI2CRequest() {
     if (onI2CRead)
-      onI2CRead(i2cContext, pendingReadRegister);
+      pendingReadRegister += onI2CRead(i2cContext, pendingReadRegister);
   }
 
   static void onI2CReceive(const int numBytes) {
@@ -210,7 +210,7 @@ public:
 
 #ifdef ENABLE_I2C_PROTOCOL
   static void setI2CCallbacks(void *ctx,
-                              void (*onRead)(void *ctx, uint8_t reg),
+                              size_t (*onRead)(void *ctx, uint8_t reg),
                               void (*onWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data)) {
     i2cContext = ctx;
     onI2CRead = onRead;
@@ -219,13 +219,23 @@ public:
 
   static void setInterrupt(const bool active) { digitalWrite(I2C_INT_PIN, active ? LOW : HIGH); }
 
-  static void i2cWrite(const uint8_t data) { Wire.write(data); }
+  static size_t i2cWrite(const uint8_t data) {
+    if (Wire.write(data) == 0)
+      return 1;
+    return 0;
+  }
 
-  static void i2cWrite(const uint8_t *data, const size_t len) { Wire.write(data, len); }
+  static size_t i2cWrite(const uint8_t *data, const size_t len) {
+    if (Wire.write(data, len) == 0)
+      return len;
+    return 0;
+  }
 
   template<typename T>
-  static void i2cWriteValue(const T &value) {
-    i2cWrite(reinterpret_cast<const uint8_t *>(&value), sizeof(T));
+  static size_t i2cWriteValue(const T &value) {
+    if (i2cWrite(reinterpret_cast<const uint8_t *>(&value), sizeof(T)) == 0)
+      return sizeof(T);
+    return 0;
   }
 #endif
 
