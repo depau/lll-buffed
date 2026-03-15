@@ -7,17 +7,17 @@ import cmd
 from smbus2 import SMBus
 
 # Register Map
-REG_COMMAND = 0x00
-REG_MOVE_DIST = 0x01
-REG_STATUS = 0x02
-REG_MODE = 0x03
-REG_MOTOR = 0x04
-REG_PARAM_SPEED = 0x05
-REG_PARAM_TIMEOUT = 0x06
-REG_PARAM_EMPTYING_TIMEOUT = 0x07
-REG_PARAM_HOLD_TIMEOUT = 0x08
-REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x09
-REG_PARAM_MULTI_PRESS_COUNT = 0x0A
+REG_COMMAND = 0x00  # 1 byte
+REG_MOVE_DIST = 0x01  # 4 bytes (float)
+REG_STATUS = 0x05  # 1 byte
+REG_MODE = 0x06  # 1 byte
+REG_MOTOR = 0x07  # 1 byte
+REG_PARAM_SPEED = 0x08  # 4 bytes (float)
+REG_PARAM_TIMEOUT = 0x0C  # 4 bytes (uint32_t)
+REG_PARAM_EMPTYING_TIMEOUT = 0x10  # 4 bytes (uint32_t)
+REG_PARAM_HOLD_TIMEOUT = 0x14  # 4 bytes (uint32_t)
+REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x18  # 1 byte
+REG_PARAM_MULTI_PRESS_COUNT = 0x19  # 1 byte
 
 # Command Codes
 CMD_OFF = 0
@@ -25,6 +25,7 @@ CMD_REGULAR = 1
 CMD_HOLD = 2
 CMD_PUSH = 3
 CMD_RETRACT = 4
+
 
 class BufferI2C:
     def __init__(self, bus_id, address, debug=False):
@@ -81,28 +82,29 @@ class BufferI2C:
         self.write_byte(REG_COMMAND, cmd_code)
 
     def set_float(self, reg, val):
-        data = struct.pack('<f', val)
+        data = struct.pack("<f", val)
         self.write_block(reg, data)
 
     def set_uint32(self, reg, val):
-        data = struct.pack('<I', val)
+        data = struct.pack("<I", val)
         self.write_block(reg, data)
 
     def get_float(self, reg):
         data = self.read_block(reg, 4)
         if data:
-            return struct.unpack('<f', data)[0]
+            return struct.unpack("<f", data)[0]
         return 0.0
 
     def get_uint32(self, reg):
         data = self.read_block(reg, 4)
         if data:
-            return struct.unpack('<I', data)[0]
+            return struct.unpack("<I", data)[0]
         return 0
 
+
 class Shell(cmd.Cmd):
-    intro = 'Welcome to the Buffer I2C Shell. Type help or ? to list commands.\n'
-    prompt = '> '
+    intro = "Welcome to the Buffer I2C Shell. Type help or ? to list commands.\n"
+    prompt = "> "
 
     def __init__(self, buffer):
         super().__init__()
@@ -202,12 +204,13 @@ class Shell(cmd.Cmd):
         status = self.buffer.read_byte(REG_STATUS)
         mode = self.buffer.read_byte(REG_MODE)
         motor = self.buffer.read_byte(REG_MOTOR)
-        
-        if status is None: return
+
+        if status is None:
+            return
 
         print("--- Status ---")
         print(f"Registers: STATUS=0x{status:02X} MODE=0x{mode:02X} MOTOR=0x{motor:02X}")
-        
+
         # Parse Flags
         filament = bool(status & 0x01)
         timed_out = bool(status & 0x02)
@@ -215,11 +218,11 @@ class Shell(cmd.Cmd):
         print(f"Filament Present: {filament}")
         print(f"Timed Out:        {timed_out}")
         print(f"Hold Timeout En:  {hold_to_en}")
-        
+
         # Parse Mode
         modes = {0: "Regular", 1: "Continuous", 2: "MoveCmd", 3: "Hold", 4: "Manual"}
         print(f"Mode:             {modes.get(mode, 'Unknown')}")
-        
+
         # Parse Motor
         motors = {0: "Push", 1: "Retract", 2: "Hold", 3: "Off"}
         print(f"Motor:            {motors.get(motor, 'Unknown')}")
@@ -227,7 +230,7 @@ class Shell(cmd.Cmd):
     def do_query(self, arg):
         """Alias for status"""
         self.do_status(arg)
-        
+
     def do_params(self, arg):
         """Read all parameters"""
         speed = self.buffer.get_float(REG_PARAM_SPEED)
@@ -236,7 +239,7 @@ class Shell(cmd.Cmd):
         hold_timeout = self.buffer.get_uint32(REG_PARAM_HOLD_TIMEOUT)
         hold_to_en = bool(self.buffer.read_byte(REG_PARAM_HOLD_TIMEOUT_ENABLED))
         mp_count = self.buffer.read_byte(REG_PARAM_MULTI_PRESS_COUNT)
-        
+
         print("--- Parameters ---")
         print(f"Speed:            {speed:.2f} mm/s")
         print(f"Timeout:          {timeout} ms")
@@ -249,20 +252,29 @@ class Shell(cmd.Cmd):
         """Exit shell"""
         print("Bye")
         return True
-        
+
     def do_quit(self, arg):
         return self.do_exit(arg)
+
 
 def main():
     parser = argparse.ArgumentParser(description="I2C CLI for Filament Buffer")
     parser.add_argument("bus", type=int, help="I2C Bus Number (e.g. 1)")
-    parser.add_argument("--addr", type=lambda x: int(x, 0), default=0x10, help="Device Address (default 0x10)")
-    parser.add_argument("-v", "--verbose", action="store_true", help="Print I2C transactions")
-    
+    parser.add_argument(
+        "--addr",
+        type=lambda x: int(x, 0),
+        default=0x10,
+        help="Device Address (default 0x10)",
+    )
+    parser.add_argument(
+        "-v", "--verbose", action="store_true", help="Print I2C transactions"
+    )
+
     args = parser.parse_args()
-    
+
     buf = BufferI2C(args.bus, args.addr, args.verbose)
     Shell(buf).cmdloop()
+
 
 if __name__ == "__main__":
     main()

@@ -5,17 +5,17 @@ BUS=""
 ADDR="0x10"
 
 # Regs
-REG_COMMAND="0x00"
-REG_MOVE_DIST="0x01"
-REG_STATUS="0x02"
-REG_MODE="0x03"
-REG_MOTOR="0x04"
-REG_PARAM_SPEED="0x05"
-REG_PARAM_TIMEOUT="0x06"
-REG_PARAM_EMPTYING_TIMEOUT="0x07"
-REG_PARAM_HOLD_TIMEOUT="0x08"
-REG_PARAM_HOLD_TIMEOUT_ENABLED="0x09"
-REG_PARAM_MULTI_PRESS_COUNT="0x0A"
+REG_COMMAND="0x00"                    # 1 byte
+REG_MOVE_DIST="0x01"                  # 4 bytes (float)
+REG_STATUS="0x05"                     # 1 byte
+REG_MODE="0x06"                       # 1 byte
+REG_MOTOR="0x07"                      # 1 byte
+REG_PARAM_SPEED="0x08"                # 4 bytes (float)
+REG_PARAM_TIMEOUT="0x0C"              # 4 bytes (uint32_t)
+REG_PARAM_EMPTYING_TIMEOUT="0x10"     # 4 bytes (uint32_t)
+REG_PARAM_HOLD_TIMEOUT="0x14"         # 4 bytes (uint32_t)
+REG_PARAM_HOLD_TIMEOUT_ENABLED="0x18" # 1 byte
+REG_PARAM_MULTI_PRESS_COUNT="0x19"    # 1 byte
 
 # Commands
 CMD_OFF="0x00"

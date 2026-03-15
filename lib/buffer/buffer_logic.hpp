@@ -29,17 +29,17 @@ constexpr size_t UART_CMD_BUF_SIZE = 64;
 
 #ifdef ENABLE_I2C_PROTOCOL
 enum I2CRegister : uint8_t {
-  REG_COMMAND = 0x00,
-  REG_MOVE_DIST,
-  REG_STATUS,
-  REG_MODE,
-  REG_MOTOR,
-  REG_PARAM_SPEED,
-  REG_PARAM_TIMEOUT,
-  REG_PARAM_EMPTYING_TIMEOUT,
-  REG_PARAM_HOLD_TIMEOUT,
-  REG_PARAM_HOLD_TIMEOUT_ENABLED,
-  REG_PARAM_MULTI_PRESS_COUNT,
+  REG_COMMAND = 0x00, // 1 byte
+  REG_MOVE_DIST = 0x01, // 4 bytes (float)
+  REG_STATUS = 0x05, // 1 byte
+  REG_MODE = 0x06, // 1 byte
+  REG_MOTOR = 0x07, // 1 byte
+  REG_PARAM_SPEED = 0x08, // 4 bytes (float)
+  REG_PARAM_TIMEOUT = 0x0C, // 4 bytes (uint32_t)
+  REG_PARAM_EMPTYING_TIMEOUT = 0x10, // 4 bytes (uint32_t)
+  REG_PARAM_HOLD_TIMEOUT = 0x14, // 4 bytes (uint32_t)
+  REG_PARAM_HOLD_TIMEOUT_ENABLED = 0x18, // 1 byte
+  REG_PARAM_MULTI_PRESS_COUNT = 0x19, // 1 byte
 };
 
 enum I2CCommand : uint8_t {

@@ -147,27 +147,27 @@ The **Interrupt Line (INT)** is asserted (pulled LOW) by the buffer whenever its
 
 **Register Map:**
 
-| Register            | Address | R/W | Description                                                                      |
-| :------------------ | :------ | :-- | :------------------------------------------------------------------------------- |
-| **COMMAND**         | `0x00`  | W   | Write command code: `0`=Off, `1`=Regular, `2`=Hold, `3`=Push, `4`=Retract        |
-| **MOVE_DIST**       | `0x01`  | W   | Write Float (4 bytes) to trigger a move (mm). Positive=Push, Negative=Retract.   |
-| **STATUS**          | `0x02`  | R   | Status flags: `Bit0`=FilamentPresent, `Bit1`=TimedOut, `Bit2`=HoldTimeoutEnabled |
-| **MODE**            | `0x03`  | R   | Current Mode: `0`=Regular, `1`=Continuous, `2`=MoveCmd, `3`=Hold, `4`=Manual     |
-| **MOTOR**           | `0x04`  | R   | Motor State: `0`=Push, `1`=Retract, `2`=Hold, `3`=Off                            |
-| **SPEED**           | `0x05`  | R/W | Motor speed in mm/s (Float, 4 bytes)                                             |
-| **TIMEOUT**         | `0x06`  | R/W | Timeout in ms (Uint32, 4 bytes)                                                  |
-| **EMPTYING_TIMEOUT**| `0x07`  | R/W | Emptying push timeout in ms (Uint32, 4 bytes)                                    |
-| **HOLD_TIMEOUT**    | `0x08`  | R/W | Hold timeout in ms (Uint32, 4 bytes)                                             |
-| **HOLD_TIMEOUT_EN** | `0x09`  | R/W | Enable hold timeout (1 byte, 0 or 1)                                             |
-| **MULTI_PRESS**     | `0x0A`  | R/W | Multi-press count (1 byte)                                                       |
+| Register             | Address | Bytes | R/W | Description                                                                  |
+|:---------------------|:--------|:------|:----|:-----------------------------------------------------------------------------|
+| **COMMAND**          | `0x00`  | 1     | W   | Write command code: `0`=Off, `1`=Regular, `2`=Hold, `3`=Push, `4`=Retract    |
+| **MOVE_DIST**        | `0x01`  | 4     | W   | Float — trigger a move (mm). Positive=Push, Negative=Retract.                |
+| **STATUS**           | `0x05`  | 1     | R   | Status flags: `Bit0`=FilamentPresent, `Bit1`=TimedOut                        |
+| **MODE**             | `0x06`  | 1     | R   | Current Mode: `0`=Regular, `1`=Continuous, `2`=MoveCmd, `3`=Hold, `4`=Manual |
+| **MOTOR**            | `0x07`  | 1     | R   | Motor State: `0`=Push, `1`=Retract, `2`=Hold, `3`=Off                        |
+| **SPEED**            | `0x08`  | 4     | R/W | Motor speed in mm/s (float)                                                  |
+| **TIMEOUT**          | `0x0C`  | 4     | R/W | Timeout in ms (uint32)                                                       |
+| **EMPTYING_TIMEOUT** | `0x10`  | 4     | R/W | Emptying push timeout in ms (uint32)                                         |
+| **HOLD_TIMEOUT**     | `0x14`  | 4     | R/W | Hold timeout in ms (uint32)                                                  |
+| **HOLD_TIMEOUT_EN**  | `0x18`  | 1     | R/W | Enable hold timeout (0 or 1)                                                 |
+| **MULTI_PRESS**      | `0x19`  | 1     | R/W | Multi-press count                                                            |
 
 **Example Transaction:**
 
 1. Master detects INT LOW.
-2. Master writes `0x01` (STATUS Register Address).
+2. Master writes `0x05` (STATUS Register Address).
 3. Master reads 1 byte (Status flags). **INT line is released.**
 4. Master checks flags (e.g., Filament Present).
 
 To trigger a move:
 
-1. Master writes `[0x04] [Float Byte 0] [Float Byte 1] [Float Byte 2] [Float Byte 3]`.
+1. Master writes `[0x01] [Float Byte 0] [Float Byte 1] [Float Byte 2] [Float Byte 3]`.
