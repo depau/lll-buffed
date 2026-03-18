@@ -52,7 +52,7 @@ class BufferHardware {
   static inline void *i2cContext = nullptr;
   static inline size_t (*onI2CRead)(void *ctx, uint8_t reg) = nullptr;
   static inline void (*onI2CWrite)(void *ctx, uint8_t reg, size_t size, const uint8_t *data) = nullptr;
-  static inline volatile uint8_t pendingReadRegister = -1;
+  static inline volatile uint8_t pendingReadRegister = 0xFF;
   static inline volatile unsigned int incomingI2CBytes = 0;
   static inline uint8_t i2cRxBuffer[64]{};
 
@@ -62,12 +62,14 @@ class BufferHardware {
   }
 
   static void onI2CReceive(const int numBytes) {
-    if (numBytes <= 0)
-      return;
-    incomingI2CBytes += numBytes;
-    constexpr int bufSize = sizeof(i2cRxBuffer);
-    for (int i = 0; i < numBytes && i < bufSize; ++i)
-      i2cRxBuffer[i] = static_cast<uint8_t>(Wire.read());
+    if (numBytes == 1) {
+      pendingReadRegister = i2cRxBuffer[0];
+    } else if (numBytes > 1) {
+      constexpr int bufSize = sizeof(i2cRxBuffer);
+      for (int i = 0; i < numBytes && i < bufSize; ++i)
+        i2cRxBuffer[i] = static_cast<uint8_t>(Wire.read());
+      incomingI2CBytes = numBytes;
+    }
   }
 
   static void handleI2CReceive() {
@@ -77,19 +79,13 @@ class BufferHardware {
     size_t count;
     {
       scoped_irq_lock lock;
-
       count = incomingI2CBytes;
-      incomingI2CBytes = Wire.available();
-
-      if (count == 1)
-        pendingReadRegister = static_cast<int16_t>(i2cRxBuffer[0]);
+      incomingI2CBytes = 0;
     }
 
-    if (count > 1) {
-      const uint8_t reg = i2cRxBuffer[0];
-      if (onI2CWrite)
-        onI2CWrite(i2cContext, reg, count - 1, &i2cRxBuffer[1]);
-    }
+    const uint8_t reg = i2cRxBuffer[0];
+    if (onI2CWrite)
+      onI2CWrite(i2cContext, reg, count - 1, &i2cRxBuffer[1]);
   }
 #endif
 
