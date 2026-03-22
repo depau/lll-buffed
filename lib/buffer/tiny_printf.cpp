@@ -37,11 +37,11 @@ static void out_int(char *&buf, size_t &rem, int32_t v, int &count) {
 }
 
 static void out_float(char *&buf, size_t &rem, double f, int &count) {
-  if (std::isnan(f)) {
+  if (isnan(f)) {
     out_str(buf, rem, "nan", count);
     return;
   }
-  if (std::isinf(f)) {
+  if (isinf(f)) {
     out_str(buf, rem, "inf", count);
     return;
   }
