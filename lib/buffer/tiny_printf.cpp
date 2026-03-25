@@ -3,6 +3,8 @@
 
 #include "tiny_printf.hpp"
 
+using namespace std;
+
 static void out_char(char *&buf, size_t &rem, const char c, int &count) {
   if (rem > 1) {
     *buf++ = c;
