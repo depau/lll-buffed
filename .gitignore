@@ -2,6 +2,7 @@
 .vscode/
 .idea/
 .cache/
+.claude/
 compile_commands.json
 *.dot
 *.log
