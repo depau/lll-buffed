@@ -1,0 +1,8 @@
+[submodule "klipper/klipper-pkg/ratos-klipper"]
+	path = klipper/e2e-test/klipper-pkg/ratos-klipper
+	url = https://github.com/Rat-OS/klipper.git
+	branch = ratos/v2.1.x
+[submodule "klipper/e2e-test/klipper-pkg/ratos-klipper"]
+	path = klipper/e2e-test/klipper-pkg/ratos-klipper
+	url = https://github.com/Rat-OS/klipper.git
+	branch = ratos/v2.1.x

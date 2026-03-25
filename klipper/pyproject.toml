@@ -1,0 +1,34 @@
+[project]
+name = "lll-buffed-klipper"
+version = "0.1.0"
+description = "Klipper module for LLL Buffed firmware"
+readme = "README.md"
+requires-python = ">=3.9,<3.12"
+classifiers = ["Private :: Do Not Upload"]
+dependencies = [
+    "ratos-klippy",
+]
+
+[tool.uv.sources]
+ratos-klippy = { path = "./e2e-test/klipper-pkg", editable = false, package = true }
+
+[dependency-groups]
+dev = [
+    "ruff>=0.15.6",
+]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.sdist]
+include = ["extras/*"]
+
+#[tool.hatch.build.targets.sdist.force-include]
+#"lll_buffer.py" = "extras/lll_buffer.py"
+
+[tool.hatch.build.targets.wheel]
+include = ["extras/lll_buffer.py"]
+
+#[tool.hatch.build.targets.wheel.force-include]
+#"lll_buffer.py" = "extras/lll_buffer.py"
