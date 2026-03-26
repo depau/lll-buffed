@@ -271,7 +271,7 @@ private:
     } else if (((arg = startsWith(cmd, "move ", nullptr))) || ((arg = startsWith(cmd, "m ", nullptr)))) {
       if (const float val = tiny::strtof(arg); val != 0.0F && speedMmS > 0.0F) {
         moveDir = val > 0 ? Motor::Push : Motor::Retract;
-        const float ms = std::fabs(val) * 1000.0F / speedMmS;
+        const float ms = tiny::abs(val) * 1000.0F / speedMmS;
         moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
         setMode(Mode::MoveCommand);
         setMotor(moveDir);
@@ -355,7 +355,7 @@ private:
         const auto dist = *reinterpret_cast<const float *>(data);
         if (dist != 0.0F && speedMmS > 0.0F) {
           moveDir = dist > 0 ? Motor::Push : Motor::Retract;
-          const float ms = std::fabs(dist) * 1000.0F / speedMmS;
+          const float ms = tiny::abs(dist) * 1000.0F / speedMmS;
           moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
           setMode(Mode::MoveCommand);
           setMotor(moveDir);
@@ -674,7 +674,7 @@ private:
       hw.writeLineF("%s=%u", "multi_press_count", multiPressCount);
       lastMultiPressCount = multiPressCount;
     }
-    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01F || force) {
+    if (tiny::abs(lastSpeedMmS - speedMmS) > 0.01F || force) {
       hw.writeLineF("speed=%f", speedMmS);
       lastSpeedMmS = speedMmS;
     }
@@ -701,7 +701,7 @@ private:
       changed = true;
     if (lastMultiPressCount != multiPressCount || force)
       changed = true;
-    if (std::fabs(lastSpeedMmS - speedMmS) > 0.01F || force)
+    if (tiny::abs(lastSpeedMmS - speedMmS) > 0.01F || force)
       changed = true;
     if (lastEmptyingPushTimeoutMs != emptyingPushTimeoutMs || force)
       changed = true;
