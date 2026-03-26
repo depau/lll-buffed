@@ -205,7 +205,7 @@ private:
 
           if (cmdBuf[0] >= '0' && cmdBuf[0] <= '9') {
             // A specific buffer is being addressed: check if it matches ours
-            if (const int bufID = cmdBuf[0] - '0'; bufID != BUFFER_ID) {
+            if (const int bufID = cmdBuf[0] - '0'; bufID != hw.getBufferID()) {
               cmdLen = 0;
               continue;
             }

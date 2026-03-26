@@ -23,6 +23,7 @@ public:
   bool errorLed{ false };
   bool presLed{ false };
   bool presOut{ false };
+  int bufferId{ 0 };
   enum class TestMotor {
     Push,
     Retract,
@@ -37,6 +38,8 @@ public:
   static void loop() {}
   static void initHardware() {}
   [[noreturn]] static void rebootDFU() { throw std::runtime_error("Reboot to DFU called"); }
+
+  constexpr int getBufferID() const { return bufferId; }
 
   bool optical1() const { return opt1; }
   bool optical2() const { return opt2; }

@@ -142,6 +142,8 @@ public:
     driver.pwm_autoscale(true);
   }
 
+  static constexpr int getBufferID() { return BUFFER_ID; }
+
   static bool optical1() { return digitalRead(OPTICAL_SENSOR_1) != 0; }
   static bool optical2() { return digitalRead(OPTICAL_SENSOR_2) != 0; }
   static bool optical3() { return digitalRead(OPTICAL_SENSOR_3) != 0; }
