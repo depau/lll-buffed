@@ -10,6 +10,10 @@
 
 #ifdef ENABLE_I2C_PROTOCOL
 #include <SoftI2CPeripheral.h>
+
+static constexpr uint8_t SIMULATOR_INVALID_I2C_ADDR = 0xAA;
+extern "C" volatile uint8_t simulator_i2c_address __attribute__((unused));
+
 #endif
 
 inline constexpr uint32_t OPTICAL_SENSOR_1 = A2; // PF2
@@ -113,6 +117,19 @@ class SimulatorHardware {
 public:
   void loop() {
 #ifdef ENABLE_I2C_PROTOCOL
+    uint8_t new_i2c_addr = 0;
+    {
+      scoped_irq_lock lock;
+      if (simulator_i2c_address != SIMULATOR_INVALID_I2C_ADDR && simulator_i2c_address != 0) {
+        i2c.setAddress(simulator_i2c_address);
+        new_i2c_addr = simulator_i2c_address;
+        simulator_i2c_address = SIMULATOR_INVALID_I2C_ADDR;
+      }
+    }
+    if (new_i2c_addr != 0) {
+      writeLineF("i2c_addr=%d\n", new_i2c_addr);
+    }
+
     handleI2C();
 #endif
   }
@@ -126,6 +143,7 @@ public:
     digitalWrite(I2C_INT_PIN, HIGH);
 
     i2c.begin(I2C_ADDR, I2C_SCL_PIN, I2C_SDA_PIN, 4, 5); // INT4 (pin 2), INT5 (pin 3)
+    simulator_i2c_address = SIMULATOR_INVALID_I2C_ADDR; // signal: I2C ready for address assignment
 #endif
 
     pinMode(OPTICAL_SENSOR_1, INPUT);
@@ -224,7 +242,8 @@ public:
   }
 
   size_t i2cWrite(const uint8_t *data, const size_t len) {
-    if (!i2cCapturingTx) return len;
+    if (!i2cCapturingTx)
+      return len;
     size_t written = 0;
     while (written < len && i2cTxLen < sizeof(i2cTxBuffer))
       i2cTxBuffer[i2cTxLen++] = data[written++];

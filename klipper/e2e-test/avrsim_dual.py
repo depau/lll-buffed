@@ -250,8 +250,6 @@ class I2CDecoder:
 class LLLProtocolDecoder:
     """Decodes I2C transactions for the LLL buffer firmware protocol."""
 
-    I2C_ADDR = 0x10
-
     _REG_NAMES = {
         0x00: "REG_COMMAND",
         0x01: "REG_MOVE_DIST",
@@ -291,7 +289,8 @@ class LLLProtocolDecoder:
         3: "Hold",
     }
 
-    def __init__(self):
+    def __init__(self, num_buffers=1):
+        self._lll_addrs = set(range(0x10, 0x10 + num_buffers))
         self.i2c_decoder = I2CDecoder(on_transaction=self._on_transaction)
 
     def _on_transaction(self, segments):
@@ -301,8 +300,8 @@ class LLLProtocolDecoder:
             hex_data = " ".join(f"{b:02x}" for b in data)
             sys.stderr.write(f"[I2C] [0x{addr:02x} {direction}] {hex_data}\n")
 
-        # Only decode LLL device address
-        if not segments or segments[0][0] != self.I2C_ADDR:
+        # Only decode LLL device addresses
+        if not segments or segments[0][0] not in self._lll_addrs:
             sys.stderr.flush()
             return
 
@@ -625,6 +624,35 @@ class Pacing(pysimulavr.PySimulationMember):
         return self.delay
 
 
+class I2CAddressSetter(pysimulavr.PySimulationMember):
+    _INVALID = 0xAA
+    _POLL = SIMULAVR_FREQ // 1000  # 1 ms sim time
+
+    def __init__(self, dev, target_addr, label):
+        pysimulavr.PySimulationMember.__init__(self)
+        self._dev = dev
+        self._target_addr = target_addr
+        self._label = label
+        self._sym_addr = dev.data.GetAddressAtSymbol("simulator_i2c_address")
+        # Write sentinel 0x00 before simulation starts
+        self._dev.setRWMem(self._sym_addr, 0x00)
+        self._done = False
+        pysimulavr.SystemClock.Instance().Add(self)
+
+    def DoStep(self, trueHwStep):
+        if self._done:
+            return -1
+        if self._dev.getRWMem(self._sym_addr) == self._INVALID:
+            sys.stderr.write(
+                f"[{self._label}] Device initialized; setting I2C address to 0x{self._target_addr:02x}\n"
+            )
+            sys.stderr.flush()
+            self._dev.setRWMem(self._sym_addr, self._target_addr)
+            self._done = True
+            return -1
+        return self._POLL
+
+
 def main():
     usage = "%prog [options] <klipper.elf> <simulator.elf>"
     opts = optparse.OptionParser(usage)
@@ -664,6 +692,28 @@ def main():
         dest="klipper_baud",
         default=250000,
         help="baud rate of the Klipper UART (default: 250000)",
+    )
+    opts.add_option(
+        "--num-buffers",
+        type="int",
+        dest="num_buffers",
+        default=1,
+        help="number of buffer devices to simulate (default: 1)",
+    )
+    opts.add_option(
+        "-i",
+        "--interrupt-line",
+        action="append",
+        dest="interrupt_lines",
+        metavar="GPIO=i,j,...",
+        help=(
+            "wire klipper GPIO to buffer INT pins; repeatable. "
+            "Default (no flag): all buffers share one net on klipper C4. "
+            "Any occurrence disables the default. "
+            "Use GPIO= to connect only the klipper pin (no buffers). "
+            "Use '' to create no INT nets at all. "
+            "Example: --interrupt-line C4=0,1 --interrupt-line C5=2"
+        ),
     )
     opts.add_option(
         "-p",
@@ -727,6 +777,7 @@ def main():
     buffer_baud = options.baud
     klipper_baud = options.klipper_baud
     ptyname = options.port
+    num_buffers = options.num_buffers
 
     sc = pysimulavr.SystemClock.Instance()
     internal_trace = InternalTrace(options.internal_tracefile, options.internal_trace)
@@ -740,30 +791,82 @@ def main():
     klipper_dev.SetClockFreq(SIMULAVR_FREQ // klipper_clock)
     sc.Add(klipper_dev)
 
-    buffer_dev = factory.makeDevice("atmega2560")
-    buffer_dev.Load(buffer_elf)
-    buffer_dev.SetClockFreq(SIMULAVR_FREQ // buffer_clock)
-    sc.Add(buffer_dev)
+    buffer_devs = []
+    buffer_addr_setters = []  # keep alive (prevent GC)
+    buffer_tx_nets = []
+
+    for i in range(num_buffers):
+        buf_dev = factory.makeDevice("atmega2560")
+        buf_dev.Load(buffer_elf)
+        buf_dev.SetClockFreq(SIMULAVR_FREQ // buffer_clock)
+        sc.Add(buf_dev)
+        buffer_devs.append(buf_dev)
+
+        # I2C address setter
+        setter = I2CAddressSetter(buf_dev, 0x10 + i, f"BUFF{i}")
+        buffer_addr_setters.append(setter)
+
+        # UART output
+        buf_out = LineBufferedOutput(f"[BUFF{i}] ", sys.stdout)
+        buf_rxpin = SerialRxPin(buffer_baud, buf_out)
+        buf_tx_net = TrackedNet()
+        buf_tx_net.add_device_pin(f"buffer{i}", buf_dev, "E1")
+        buf_tx_net.Add(buf_rxpin)
+        buffer_tx_nets.append(buf_tx_net)
+
+    # INT lines: default connects all buffer D0 to klipper C4 on one shared net.
+    # Override with --interrupt-line GPIO=i,j,... (repeatable); any occurrence
+    # disables the default.  Use GPIO= to wire the klipper pin with no buffers.
+    # Use '' (empty) to create no INT nets at all.
+    int_nets = {}  # gpio_name → TrackedNet
+    if options.interrupt_lines is None:
+        net = TrackedNet()
+        net.add_device_pin("klipper", klipper_dev, "C4")
+        for i, buf_dev in enumerate(buffer_devs):
+            net.add_device_pin(f"buffer{i}", buf_dev, "D0")
+        int_nets["C4"] = net
+    else:
+        for spec in options.interrupt_lines:
+            spec = spec.strip()
+            if not spec:
+                continue
+            if "=" not in spec:
+                opts.error(f"Invalid --interrupt-line {spec!r}: expected GPIO=indices")
+            gpio, _, indices_str = spec.partition("=")
+            gpio = gpio.strip().upper()
+            if not gpio:
+                continue
+            net = TrackedNet()
+            net.add_device_pin("klipper", klipper_dev, gpio)
+            for idx_str in indices_str.split(","):
+                idx_str = idx_str.strip()
+                if not idx_str:
+                    continue
+                idx = int(idx_str)
+                if idx < 0 or idx >= num_buffers:
+                    opts.error(
+                        f"Buffer index {idx} out of range (0..{num_buffers - 1})"
+                    )
+                net.add_device_pin(f"buffer{idx}", buffer_devs[idx], "D0")
+            int_nets[gpio] = net
 
     internal_trace.load_options()
 
-    # I2C SCL: klipper_dev PC0 (HW TWI SCL) <-> buffer_dev PE4 (SoftI2C SCL / INT4)
+    # I2C SCL: klipper_dev PC0 (HW TWI SCL) <-> all buffer PE4 (SoftI2C SCL / INT4)
     i2c_scl_net = TrackedNet()
     i2c_scl_net.add_device_pin("klipper", klipper_dev, "C0")
-    i2c_scl_net.add_device_pin("buffer", buffer_dev, "E4")
 
-    # I2C SDA: klipper_dev PC1 (HW TWI SDA) <-> buffer_dev PE5 (SoftI2C SDA / INT5)
+    # I2C SDA: klipper_dev PC1 (HW TWI SDA) <-> all buffer PE5 (SoftI2C SDA / INT5)
     i2c_sda_net = TrackedNet()
     i2c_sda_net.add_device_pin("klipper", klipper_dev, "C1")
-    i2c_sda_net.add_device_pin("buffer", buffer_dev, "E5")
 
-    # INT line (active-low open-drain): buffer_dev PD0 (I2C_INT_PIN) -> klipper_dev PC4
-    i2c_int_net = TrackedNet()
-    i2c_int_net.add_device_pin("klipper", klipper_dev, "C4")
-    i2c_int_net.add_device_pin("buffer", buffer_dev, "D0")
+    # Connect all buffer devices to the shared I2C bus
+    for i, buf_dev in enumerate(buffer_devs):
+        i2c_scl_net.add_device_pin(f"buffer{i}", buf_dev, "E4")
+        i2c_sda_net.add_device_pin(f"buffer{i}", buf_dev, "E5")
 
     # I2C protocol decoder: always active, prints decoded transactions to stderr
-    lll_decoder = LLLProtocolDecoder()
+    lll_decoder = LLLProtocolDecoder(num_buffers=num_buffers)
     i2c_scl_net.Add(lll_decoder.i2c_decoder.scl_mon)
     i2c_sda_net.Add(lll_decoder.i2c_decoder.sda_mon)
 
@@ -781,24 +884,19 @@ def main():
     klipper_uart_rx_net.add_device_pin("klipper", klipper_dev, "D0")
     klipper_uart_rx_net.Add(klipper_txpin)
 
-    # Buffer firmware UART: TX only, printed to stdout with [BUFF] prefix
-    buffer_out = LineBufferedOutput("[BUFF] ", sys.stdout)
-    buffer_rxpin = SerialRxPin(buffer_baud, buffer_out)
-    buffer_tx_net = TrackedNet()
-    buffer_tx_net.add_device_pin("buffer", buffer_dev, "E1")
-    buffer_tx_net.Add(buffer_rxpin)
-
     # External trace: observe Net/pin state as seen on the simulated wires.
     external_trace = None
     if options.external_trace:
         named_nets = {
             "scl": i2c_scl_net,
             "sda": i2c_sda_net,
-            "int": i2c_int_net,
             "klipper_to_pty_tx": klipper_uart_tx_net,
             "klipper_from_pty_rx": klipper_uart_rx_net,
-            "buffer_tx_to_stdout": buffer_tx_net,
         }
+        for i, net in enumerate(buffer_tx_nets):
+            named_nets[f"buffer{i}_tx_to_stdout"] = net
+        for gpio_name, net in int_nets.items():
+            named_nets[f"int_{gpio_name.lower()}"] = net
 
         # Build dev_pin_nets automatically from pins registered in each TrackedNet.
         # This is the single source of truth — no manual duplication needed.
@@ -842,13 +940,14 @@ def main():
     if options.pacing_rate:
         pacing = Pacing(options.pacing_rate)  # noqa: F841
 
-    sys.stdout.write("Starting Klipper + Simulator dual AVR simulation\n")
+    sys.stdout.write("Starting Klipper + Buffer dual AVR simulation\n")
     sys.stdout.write(
         f"  Klipper: atmega644p {klipper_elf}  clock={klipper_clock}  baud={klipper_baud}  PTY={ptyname}\n"
     )
-    sys.stdout.write(
-        f"  Simulator: atmega2560 {buffer_elf}  clock={buffer_clock}  baud={buffer_baud}\n"
-    )
+    for i in range(num_buffers):
+        sys.stdout.write(
+            f"  Buffer[{i}]: atmega2560 {buffer_elf}  i2c=0x{0x10 + i:02x}  clock={buffer_clock}  baud={buffer_baud}\n"
+        )
     sys.stdout.flush()
 
     signal.signal(signal.SIGHUP, lambda sig, frame: sc.stop())
