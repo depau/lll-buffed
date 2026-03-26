@@ -127,7 +127,7 @@ public:
       }
     }
     if (new_i2c_addr != 0) {
-      writeLineF("i2c_addr=%d\n", new_i2c_addr);
+      writeLineF("i2c_addr=0x%x", new_i2c_addr);
     }
 
     handleI2C();
