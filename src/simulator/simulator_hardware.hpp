@@ -8,10 +8,12 @@
 
 #include "tiny_printf.hpp"
 
+static constexpr uint8_t SIMULATOR_SENTINEL = 0xAA;
+extern "C" volatile uint8_t simulator_buffer_id __attribute__((used, unused));
+
 #ifdef ENABLE_I2C_PROTOCOL
 #include <SoftI2CPeripheral.h>
 
-static constexpr uint8_t SIMULATOR_INVALID_I2C_ADDR = 0xAA;
 extern "C" volatile uint8_t simulator_i2c_address __attribute__((unused));
 
 #endif
@@ -61,6 +63,7 @@ public:
 };
 
 class SimulatorHardware {
+  int bufferID = BUFFER_ID;
 #ifdef ENABLE_UART_PROTOCOL
   SoftwareSerial serial{ UART_RX_PIN, UART_TX_PIN };
 #endif
@@ -116,14 +119,20 @@ class SimulatorHardware {
 
 public:
   void loop() {
+    if (simulator_buffer_id != SIMULATOR_SENTINEL) {
+      bufferID = simulator_buffer_id;
+      simulator_buffer_id = SIMULATOR_SENTINEL;
+      writeLineF("buffer_id=%d", bufferID);
+    }
+
 #ifdef ENABLE_I2C_PROTOCOL
     uint8_t new_i2c_addr = 0;
     {
       scoped_irq_lock lock;
-      if (simulator_i2c_address != SIMULATOR_INVALID_I2C_ADDR && simulator_i2c_address != 0) {
+      if (simulator_i2c_address != SIMULATOR_SENTINEL) {
         i2c.setAddress(simulator_i2c_address);
         new_i2c_addr = simulator_i2c_address;
-        simulator_i2c_address = SIMULATOR_INVALID_I2C_ADDR;
+        simulator_i2c_address = SIMULATOR_SENTINEL;
       }
     }
     if (new_i2c_addr != 0) {
@@ -143,8 +152,9 @@ public:
     digitalWrite(I2C_INT_PIN, HIGH);
 
     i2c.begin(I2C_ADDR, I2C_SCL_PIN, I2C_SDA_PIN, 4, 5); // INT4 (pin 2), INT5 (pin 3)
-    simulator_i2c_address = SIMULATOR_INVALID_I2C_ADDR; // signal: I2C ready for address assignment
+    simulator_i2c_address = SIMULATOR_SENTINEL; // signal: I2C ready for address assignment
 #endif
+    simulator_buffer_id = SIMULATOR_SENTINEL;
 
     pinMode(OPTICAL_SENSOR_1, INPUT);
     pinMode(OPTICAL_SENSOR_2, INPUT);

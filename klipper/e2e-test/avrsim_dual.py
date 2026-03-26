@@ -603,33 +603,40 @@ class TrackedNet:
 
 
 # noinspection PyPep8Naming
-class I2CAddressSetter(pysimulavr.PySimulationMember):
-    _INVALID = 0xAA
-    _POLL = SIMULAVR_FREQ // 1000  # 1 ms sim time
+class BufferInstanceConfigurator(pysimulavr.PySimulationMember):
+    SENTINEL = 0xAA
+    POLL = SIMULAVR_FREQ // 1000  # 1 ms sim time
 
-    def __init__(self, dev, target_addr, label):
+    def __init__(self, dev, buf_index, label):
         pysimulavr.PySimulationMember.__init__(self)
         self._dev = dev
-        self._target_addr = target_addr
+        self._buf_index = buf_index
         self._label = label
-        self._sym_addr = dev.data.GetAddressAtSymbol("simulator_i2c_address")
-        # Write sentinel 0x00 before simulation starts
-        self._dev.setRWMem(self._sym_addr, 0x00)
+        self._buf_id_addr = dev.data.GetAddressAtSymbol("simulator_buffer_id")
+        self._i2c_addr_addr = dev.data.GetAddressAtSymbol("simulator_i2c_address")
+        # Initialize to a known value to detect variable initialization
+        self._dev.setRWMem(self._buf_id_addr, 0xFF)
+        self._dev.setRWMem(self._i2c_addr_addr, 0xFF)
         self._done = False
         pysimulavr.SystemClock.Instance().Add(self)
 
     def DoStep(self, trueHwStep):
         if self._done:
             return -1
-        if self._dev.getRWMem(self._sym_addr) == self._INVALID:
+        if (
+            self._dev.getRWMem(self._buf_id_addr) == self.SENTINEL
+            and self._dev.getRWMem(self._i2c_addr_addr) == self.SENTINEL
+        ):
+            i2c_addr = 0x10 + self._buf_index
             sys.stderr.write(
-                f"[{self._label}] Device initialized; setting I2C address to 0x{self._target_addr:02x}\n"
+                f"[{self._label}] Device initialized; setting buffer ID to {self._buf_index}, I2C address to 0x{i2c_addr:02x}\n"
             )
             sys.stderr.flush()
-            self._dev.setRWMem(self._sym_addr, self._target_addr)
+            self._dev.setRWMem(self._buf_id_addr, self._buf_index)
+            self._dev.setRWMem(self._i2c_addr_addr, i2c_addr)
             self._done = True
             return -1
-        return self._POLL
+        return self.POLL
 
 
 def main():
@@ -773,9 +780,9 @@ def main():
         sc.Add(buf_dev)
         buffer_devs.append(buf_dev)
 
-        # I2C address setter
-        setter = I2CAddressSetter(buf_dev, 0x10 + i, f"BUFF{i}")
-        buffer_addr_setters.append(setter)
+        # Configure instance-specific settings
+        cfg = BufferInstanceConfigurator(buf_dev, i, f"BUFF{i}")
+        buffer_addr_setters.append(cfg)
 
         # UART output
         buf_out = LineBufferedOutput(f"[BUFF{i}] ", sys.stdout)
