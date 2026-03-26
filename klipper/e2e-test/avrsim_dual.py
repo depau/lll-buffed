@@ -44,12 +44,14 @@ class LineBufferedOutput:
                 self.stream.flush()
 
 
+# noinspection PyPep8Naming
 class SerialRxPin(pysimulavr.PySimulationMember, pysimulavr.Pin):
     """Reads serial data from an AVR transmit pin and writes it to an output stream."""
 
     def __init__(self, baud, output):
         pysimulavr.Pin.__init__(self)
         pysimulavr.PySimulationMember.__init__(self)
+        self.state = None
         self.output = output
         self.sc = pysimulavr.SystemClock.Instance()
         self.delay = SIMULAVR_FREQ // baud
@@ -78,6 +80,7 @@ class SerialRxPin(pysimulavr.PySimulationMember, pysimulavr.Pin):
         return self.delay
 
 
+# noinspection PyPep8Naming
 class SerialTxPin(pysimulavr.PySimulationMember, pysimulavr.Pin):
     """Sends serial data from a terminal to an AVR receive pin."""
 
@@ -129,6 +132,7 @@ class TerminalIO:
         return ""
 
 
+# noinspection PyProtectedMember
 class _I2CLineMonitor(pysimulavr.Pin):
     """Internal: monitors one I2C line; notifies decoder on level change."""
 
@@ -479,6 +483,7 @@ class InternalTrace:
 
 
 # External trace: observes Net/pin state as seen on the simulated wires via VCD.
+# noinspection PyProtectedMember
 class _ExternalTracePin(pysimulavr.Pin):
     """Monitor pin attached to a Net that records level changes to an ExternalTrace.
 
@@ -586,12 +591,12 @@ class TrackedNet:
 
     def __init__(self):
         self._net = pysimulavr.Net()
-        self._device_pins = {}  # (dev_name, pin_name) -> Pin
+        self.device_pins = {}  # (dev_name, pin_name) -> Pin
 
     def add_device_pin(self, dev_name, dev, pin_name):
         pin = dev.GetPin(pin_name)
         self._net.Add(pin)
-        self._device_pins[(dev_name, pin_name)] = pin
+        self.device_pins[(dev_name, pin_name)] = pin
 
     def Add(self, pin):
         self._net.Add(pin)
@@ -868,7 +873,7 @@ def main():
         # This is the single source of truth — no manual duplication needed.
         dev_pin_nets = {}
         for net in named_nets.values():
-            for key in net._device_pins:
+            for key in net.device_pins:
                 dev_pin_nets[key] = net
 
         if options.external_trace.strip() == "?":
@@ -898,7 +903,7 @@ def main():
                     known = ", ".join(f"{d}.{p}" for d, p in sorted(dev_pin_nets))
                     sys.exit(f"Unknown signal {token!r} — known device pins: {known}")
                 external_trace.add_pin(
-                    token.upper(), tracked._device_pins[(dev, pin)], tracked
+                    token.upper(), tracked.device_pins[(dev, pin)], tracked
                 )
             else:
                 sys.exit(f"Unknown signal: {token!r} (use --external-trace ? for help)")
