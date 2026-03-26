@@ -629,7 +629,7 @@ class BufferInstanceConfigurator(pysimulavr.PySimulationMember):
         ):
             i2c_addr = 0x10 + self._buf_index
             sys.stderr.write(
-                f"[{self._label}] Device initialized; setting buffer ID to {self._buf_index}, I2C address to 0x{i2c_addr:02x}\n"
+                f"[{self._label} - sim] Setting buffer ID to {self._buf_index}, I2C address to 0x{i2c_addr:02x}\n"
             )
             sys.stderr.flush()
             self._dev.setRWMem(self._buf_id_addr, self._buf_index)
@@ -919,11 +919,11 @@ def main():
 
     sys.stdout.write("Starting Klipper + Buffer dual AVR simulation\n")
     sys.stdout.write(
-        f"  Klipper: atmega644p {klipper_elf}  clock={klipper_clock}  baud={klipper_baud}  PTY={ptyname}\n"
+        f"  Klipper:   atmega644p  clock={klipper_clock}  baud={klipper_baud}  i2c=CTRL  {klipper_elf}  (PTY={ptyname})\n"
     )
     for i in range(num_buffers):
         sys.stdout.write(
-            f"  Buffer[{i}]: atmega2560 {buffer_elf}  i2c=0x{0x10 + i:02x}  clock={buffer_clock}  baud={buffer_baud}\n"
+            f"  Buffer[{i}]: atmega2560  clock={buffer_clock}  baud={buffer_baud}  i2c=0x{0x10 + i:02x}  {buffer_elf}\n"
         )
     sys.stdout.flush()
 
