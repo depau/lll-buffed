@@ -19,12 +19,17 @@ static void out_str(char *&buf, size_t &rem, const char *s, int &count) {
   }
 }
 
-static void out_uint(char *&buf, size_t &rem, uint32_t v, int &count) {
+static void out_uint(char *&buf, size_t &rem, uint32_t v, const int base, const bool lowercase, int &count) {
   char tmp[16];
   unsigned i = 0;
   do {
-    tmp[i++] = '0' + (v % 10);
-    v /= 10;
+    constexpr auto digits = "0123456789ABCDEF";
+    const uint32_t digit = v % base;
+    char c = digits[digit];
+    if (digit >= 10 && lowercase)
+      c += 32; // Convert to uppercase
+    tmp[i++] = c;
+    v /= base;
   } while (v);
   while (i--)
     out_char(buf, rem, tmp[i], count);
@@ -35,7 +40,7 @@ static void out_int(char *&buf, size_t &rem, int32_t v, int &count) {
     out_char(buf, rem, '-', count);
     v = -v;
   }
-  out_uint(buf, rem, static_cast<uint32_t>(v), count);
+  out_uint(buf, rem, static_cast<uint32_t>(v), 10, false, count);
 }
 
 static void out_float(char *&buf, size_t &rem, double f, int &count) {
@@ -56,7 +61,7 @@ static void out_float(char *&buf, size_t &rem, double f, int &count) {
   const auto ip = static_cast<uint32_t>(f);
   double frac = f - static_cast<double>(ip);
 
-  out_uint(buf, rem, ip, count);
+  out_uint(buf, rem, ip, 10, false, count);
   out_char(buf, rem, '.', count);
 
   for (int i = 0; i < 2; ++i) { // 2 decimal places
@@ -78,14 +83,25 @@ int tiny::vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
       continue;
     }
 
+    int base = 16;
+    bool lowercase = false;
+
     ++fmt;
     switch (*fmt) {
     case 'd':
       out_int(p, rem, va_arg(ap, int), count);
       break;
+    // <optimization> - handle %u/%x/%X in a single case to minimize code size
     case 'u':
-      out_uint(p, rem, va_arg(ap, unsigned), count);
+      base = 10;
+      [[fallthrough]];
+    case 'x':
+      lowercase = true;
+      [[fallthrough]];
+    case 'X':
+      out_uint(p, rem, va_arg(ap, unsigned), base, lowercase, count);
       break;
+    // </optimization>
     case 's':
       out_str(p, rem, va_arg(ap, const char *), count);
       break;

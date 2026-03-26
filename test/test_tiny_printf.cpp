@@ -28,9 +28,9 @@ TEST(TinyPrintf, Snprintf) {
   char buf[64];
   int r;
 
-  r = tiny::snprintf(buf, sizeof(buf), "test %d %u %s %c %%", -123, 456u, "hello", 'X');
-  EXPECT_STREQ(buf, "test -123 456 hello X %");
-  EXPECT_EQ(r, static_cast<int>(strlen("test -123 456 hello X %")));
+  r = tiny::snprintf(buf, sizeof(buf), "test %d %u %X %x %s %c %%", -123, 456u, 0xDEAD, 0xBEEF, "hello", 'X');
+  EXPECT_STREQ(buf, "test -123 456 DEAD beef hello X %");
+  EXPECT_EQ(r, static_cast<int>(strlen("test -123 456 DEAD beef hello X %")));
 
   r = tiny::snprintf(buf, sizeof(buf), "float: %f", 123.456);
   EXPECT_STREQ(buf, "float: 123.45"); // Implementation uses 2 decimal places
