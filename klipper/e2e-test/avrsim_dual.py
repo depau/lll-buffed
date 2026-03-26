@@ -771,6 +771,7 @@ def main():
 
     buffer_devs = []
     buffer_addr_setters = []  # keep alive (prevent GC)
+    buffer_rx_pins = []  # keep alive (prevent GC)
     buffer_tx_nets = []
 
     for i in range(num_buffers):
@@ -790,6 +791,7 @@ def main():
         buf_tx_net = TrackedNet()
         buf_tx_net.add_device_pin(f"buffer{i}", buf_dev, "E1")
         buf_tx_net.Add(buf_rxpin)
+        buffer_rx_pins.append(buf_rxpin)
         buffer_tx_nets.append(buf_tx_net)
 
     # INT lines: default connects all buffer D0 to klipper C4 on one shared net.
