@@ -18,7 +18,6 @@ import struct
 import sys
 import termios
 import threading
-import time
 
 import pysimulavr
 
@@ -598,32 +597,7 @@ class TrackedNet:
         self._net.Add(pin)
 
 
-# Pace the simulation scaled to real time
-class Pacing(pysimulavr.PySimulationMember):
-    def __init__(self, rate):
-        pysimulavr.PySimulationMember.__init__(self)
-        self.sc = pysimulavr.SystemClock.Instance()
-        self.pacing_rate = 1.0 / (rate * SIMULAVR_FREQ)
-        self.next_check_clock = 0
-        self.rel_time = time.time()
-        self.best_offset = 0.0
-        self.delay = SIMULAVR_FREQ // 10000
-        self.sc.Add(self)
-
-    def DoStep(self, trueHwStep):
-        curtime = time.time()
-        clock = self.sc.GetCurrentTime()
-        offset = clock * self.pacing_rate - (curtime - self.rel_time)
-        self.best_offset = max(self.best_offset, offset)
-        if offset > 0.000050:
-            time.sleep(offset - 0.000040)
-        if clock >= self.next_check_clock:
-            self.rel_time -= min(self.best_offset, 0.0)
-            self.next_check_clock = clock + self.delay * 500
-            self.best_offset = -999999999.0
-        return self.delay
-
-
+# noinspection PyPep8Naming
 class I2CAddressSetter(pysimulavr.PySimulationMember):
     _INVALID = 0xAA
     _POLL = SIMULAVR_FREQ // 1000  # 1 ms sim time
@@ -669,14 +643,6 @@ def main():
         dest="buffer_clock",
         default=16000000,
         help="machine speed",
-    )
-    opts.add_option(
-        "-r",
-        "--rate",
-        type="float",
-        dest="pacing_rate",
-        default=0.0,
-        help="real-time pacing rate",
     )
     opts.add_option(
         "-b",
@@ -936,9 +902,6 @@ def main():
                 )
             else:
                 sys.exit(f"Unknown signal: {token!r} (use --external-trace ? for help)")
-
-    if options.pacing_rate:
-        pacing = Pacing(options.pacing_rate)  # noqa: F841
 
     sys.stdout.write("Starting Klipper + Buffer dual AVR simulation\n")
     sys.stdout.write(
