@@ -925,7 +925,8 @@ def main():
     # unreliable for finite durations with multi-device setups).
     if options.timeout:
         t = threading.Timer(
-            options.timeout, lambda: os.kill(os.getpid(), signal.SIGINT)
+            options.timeout,
+            lambda: os.kill(os.getpid(), signal.SIGTERM),
         )
         t.start()
 
@@ -933,7 +934,7 @@ def main():
         internal_trace.start()
         if external_trace:
             external_trace.start()
-        sc.RunTimeRange(0x7FFF0000FFFF0000)
+        sc.Endless()
     except KeyboardInterrupt:
         pass
     finally:
