@@ -269,7 +269,7 @@ private:
       hw.writeLineF("mode=dfu");
       HW::rebootDFU();
     } else if (((arg = startsWith(cmd, "move ", nullptr))) || ((arg = startsWith(cmd, "m ", nullptr)))) {
-      if (const float val = tiny_strtof(arg); val != 0.0F && speedMmS > 0.0F) {
+      if (const float val = tiny::strtof(arg); val != 0.0F && speedMmS > 0.0F) {
         moveDir = val > 0 ? Motor::Push : Motor::Retract;
         const float ms = std::fabs(val) * 1000.0F / speedMmS;
         moveEnd = hw.timeMs() + static_cast<uint32_t>(ms);
@@ -277,20 +277,20 @@ private:
         setMotor(moveDir);
       }
     } else if ((arg = startsWith(cmd, "set_", "timeout", " ", nullptr))) {
-      timeoutMs = tiny_strtoul(arg);
+      timeoutMs = tiny::strtoul(arg);
     } else if ((arg = startsWith(cmd, "set_", "hold_", "timeout", nullptr))) {
       const char *oldArg = arg;
       if ((arg = startsWith(arg, "_en ", nullptr))) {
-        holdTimeoutEnabled = static_cast<bool>(tiny_strtoul(arg));
+        holdTimeoutEnabled = static_cast<bool>(tiny::strtoul(arg));
       } else {
-        holdTimeoutMs = tiny_strtoul(oldArg);
+        holdTimeoutMs = tiny::strtoul(oldArg);
       }
     } else if ((arg = startsWith(cmd, "set_", "multi_press_count", " ", nullptr))) {
-      multiPressCount = static_cast<uint8_t>(tiny_strtoul(arg));
+      multiPressCount = static_cast<uint8_t>(tiny::strtoul(arg));
     } else if ((arg = startsWith(cmd, "set_", "speed", " ", nullptr))) {
-      speedMmS = tiny_strtof(arg);
+      speedMmS = tiny::strtof(arg);
     } else if ((arg = startsWith(cmd, "set_", "emptying_", "timeout", " ", nullptr))) {
-      emptyingPushTimeoutMs = tiny_strtoul(arg);
+      emptyingPushTimeoutMs = tiny::strtoul(arg);
     }
     updateStatus();
   }

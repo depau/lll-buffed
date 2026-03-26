@@ -186,7 +186,7 @@ public:
     char buf[BufSize + 1];
     va_list args;
     va_start(args, fmt);
-    tiny_vsnprintf(buf, BufSize, fmt, args);
+    tiny::vsnprintf(buf, BufSize, fmt, args);
     va_end(args);
     writeLine(buf);
   }

@@ -67,7 +67,7 @@ static void out_float(char *&buf, size_t &rem, double f, int &count) {
   }
 }
 
-int tiny_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
+int tiny::vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
   char *p = buf;
   size_t rem = size;
   int count = 0;
@@ -112,10 +112,10 @@ int tiny_vsnprintf(char *buf, size_t size, const char *fmt, va_list ap) {
   return count;
 }
 
-int tiny_snprintf(char *buf, const size_t size, const char *fmt, ...) {
+int tiny::snprintf(char *buf, const size_t size, const char *fmt, ...) {
   va_list ap;
   va_start(ap, fmt);
-  const int r = tiny_vsnprintf(buf, size, fmt, ap);
+  const int r = tiny::vsnprintf(buf, size, fmt, ap);
   va_end(ap);
   return r;
 }
@@ -157,14 +157,14 @@ static void tiny_strtod_impl(const char *str, const bool expect_decimals, int32_
   }
 }
 
-unsigned int tiny_strtoul(const char *str) {
+unsigned int tiny::strtoul(const char *str) {
   int32_t num = 0;
   unsigned int exp = 0;
   tiny_strtod_impl(str, false, num, exp);
   return static_cast<unsigned int>(num);
 }
 
-float tiny_strtof(const char *str) {
+float tiny::strtof(const char *str) {
   int32_t num = 0;
   unsigned int exp = 0;
   tiny_strtod_impl(str, true, num, exp);
