@@ -1,0 +1,11 @@
+{
+  "name": "toolchain-atmelavr",
+  "version": "14.2.0",
+  "description": "Custom AVR-GCC toolchain (system)",
+  "system": [
+    "linux_x86_64",
+    "linux_armv7l",
+    "linux_aarch64"
+  ],
+  "url": "https://gcc.gnu.org/"
+}
