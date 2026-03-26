@@ -927,15 +927,15 @@ def main():
         )
     sys.stdout.flush()
 
-    signal.signal(signal.SIGHUP, lambda sig, frame: sc.stop())
-    signal.signal(signal.SIGINT, lambda sig, frame: sc.stop())
+    signal.signal(signal.SIGHUP, lambda sig, frame: sc.Stop())
+    signal.signal(signal.SIGINT, lambda sig, frame: sc.Stop())
 
     # Real-time timeout via a background thread (RunTimeRange blocks and is
     # unreliable for finite durations with multi-device setups).
     if options.timeout:
         t = threading.Timer(
             options.timeout,
-            lambda: os.kill(os.getpid(), signal.SIGTERM),
+            lambda: os.kill(os.getpid(), signal.SIGINT),
         )
         t.start()
 
