@@ -14,6 +14,7 @@ import optparse
 import os
 import pty
 import signal
+import struct
 import sys
 import termios
 import threading
@@ -129,6 +130,286 @@ class TerminalIO:
         return ""
 
 
+class _I2CLineMonitor(pysimulavr.Pin):
+    """Internal: monitors one I2C line; notifies decoder on level change."""
+
+    def __init__(self, decoder):
+        pysimulavr.Pin.__init__(self)
+        self._decoder = decoder
+        self.level = None  # "H" or "L"
+
+    def SetInState(self, pin):
+        pysimulavr.Pin.SetInState(self, pin)
+        s = pin.outState
+        if s in (self.HIGH, self.PULLUP):
+            new = "H"
+        elif s in (self.LOW, self.PULLDOWN):
+            new = "L"
+        else:
+            new = None  # TRISTATE / unknown
+        if new == self.level:
+            return
+        self.level = new
+        self._decoder._on_change()
+
+
+class I2CDecoder:
+    """Monitors SCL and SDA lines and reconstructs I2C transactions.
+
+    Calls on_transaction(segments) when a STOP condition is detected.
+    segments is a list of (addr, is_read, bytes_list) tuples.
+    """
+
+    def __init__(self, on_transaction=None):
+        self.scl_mon = _I2CLineMonitor(self)
+        self.sda_mon = _I2CLineMonitor(self)
+        self._on_transaction_cb = on_transaction
+        self._prev_scl = None
+        self._prev_sda = None
+        self._reset()
+
+    def _reset(self):
+        self._in_frame = False
+        self._bits = []
+        self._cur_addr = None
+        self._cur_is_read = False
+        self._cur_bytes = []
+        self._segments = []
+
+    def _finish_segment(self):
+        if self._cur_addr is not None:
+            self._segments.append(
+                (self._cur_addr, self._cur_is_read, list(self._cur_bytes))
+            )
+        self._cur_addr = None
+        self._cur_is_read = False
+        self._cur_bytes = []
+        self._bits = []
+
+    def _process_byte(self, byte):
+        if self._cur_addr is None:
+            self._cur_addr = byte >> 1
+            self._cur_is_read = bool(byte & 1)
+        else:
+            self._cur_bytes.append(byte)
+
+    def _handle_scl_rise(self, sda):
+        bit = 1 if sda == "H" else 0
+        self._bits.append(bit)
+        if len(self._bits) == 9:
+            byte = 0
+            for b in self._bits[:8]:
+                byte = (byte << 1) | b
+            self._bits = []
+            self._process_byte(byte)
+
+    def _handle_start(self):
+        if self._in_frame:
+            self._finish_segment()
+        else:
+            self._in_frame = True
+        self._cur_addr = None
+        self._cur_is_read = False
+        self._cur_bytes = []
+        self._bits = []
+
+    def _handle_stop(self):
+        self._finish_segment()
+        if self._on_transaction_cb is not None:
+            self._on_transaction_cb(list(self._segments))
+        else:
+            for addr, is_read, data in self._segments:
+                direction = "R" if is_read else "W"
+                hex_data = " ".join(f"{b:02x}" for b in data)
+                sys.stderr.write(f"[I2C] [0x{addr:02x} {direction}] {hex_data}\n")
+                sys.stderr.flush()
+        self._reset()
+
+    def _on_change(self):
+        scl = self.scl_mon.level
+        sda = self.sda_mon.level
+        prev_scl = self._prev_scl
+        prev_sda = self._prev_sda
+        self._prev_scl = scl
+        self._prev_sda = sda
+
+        if scl is None or sda is None:
+            return
+
+        # START condition: SDA falls while SCL is high
+        if scl == "H" and prev_sda == "H" and sda == "L":
+            self._handle_start()
+        # STOP condition: SDA rises while SCL is high
+        elif self._in_frame and scl == "H" and prev_sda == "L" and sda == "H":
+            self._handle_stop()
+        # SCL rising edge: sample data bit
+        elif self._in_frame and prev_scl == "L" and scl == "H":
+            self._handle_scl_rise(sda)
+
+
+class LLLProtocolDecoder:
+    """Decodes I2C transactions for the LLL buffer firmware protocol."""
+
+    I2C_ADDR = 0x10
+
+    _REG_NAMES = {
+        0x00: "REG_COMMAND",
+        0x01: "REG_MOVE_DIST",
+        0x05: "REG_STATUS",
+        0x06: "REG_MODE",
+        0x07: "REG_MOTOR",
+        0x08: "REG_PARAM_SPEED",
+        0x0C: "REG_PARAM_TIMEOUT",
+        0x10: "REG_PARAM_EMPTYING_TIMEOUT",
+        0x14: "REG_PARAM_HOLD_TIMEOUT",
+        0x18: "REG_PARAM_HOLD_TIMEOUT_ENABLED",
+        0x19: "REG_PARAM_MULTI_PRESS_COUNT",
+    }
+
+    _CMD_NAMES = {
+        0: "CMD_OFF",
+        1: "CMD_REGULAR",
+        2: "CMD_HOLD",
+        3: "CMD_PUSH",
+        4: "CMD_RETRACT",
+        0xDF: "CMD_REBOOT_DFU",
+    }
+
+    _MODE_NAMES = {
+        0: "Regular",
+        1: "Continuous",
+        2: "MoveCommand",
+        3: "Hold",
+        4: "Manual",
+        5: "Emptying",
+    }
+
+    _MOTOR_NAMES = {
+        0: "Off",
+        1: "Push",
+        2: "Retract",
+        3: "Hold",
+    }
+
+    def __init__(self):
+        self.i2c_decoder = I2CDecoder(on_transaction=self._on_transaction)
+
+    def _on_transaction(self, segments):
+        # Print raw hex for each segment
+        for addr, is_read, data in segments:
+            direction = "R" if is_read else "W"
+            hex_data = " ".join(f"{b:02x}" for b in data)
+            sys.stderr.write(f"[I2C] [0x{addr:02x} {direction}] {hex_data}\n")
+
+        # Only decode LLL device address
+        if not segments or segments[0][0] != self.I2C_ADDR:
+            sys.stderr.flush()
+            return
+
+        # Register write: 1 segment, write, data non-empty
+        if len(segments) == 1 and not segments[0][1] and len(segments[0][2]) >= 1:
+            _, _, data = segments[0]
+            reg = data[0]
+            payload = data[1:]
+            line = self._decode_write(reg, payload)
+            if line:
+                sys.stderr.write(f"[LLL] {line}\n")
+
+        # Register read: 2 segments, first write + second read
+        elif len(segments) == 2 and not segments[0][1] and segments[1][1]:
+            _, _, write_data = segments[0]
+            _, _, read_data = segments[1]
+            if write_data:
+                reg = write_data[0]
+                line = self._decode_read(reg, read_data)
+                if line:
+                    sys.stderr.write(f"[LLL] {line}\n")
+
+        sys.stderr.write("\n")
+        sys.stderr.flush()
+
+    def _format_reg(self, reg):
+        return self._REG_NAMES.get(reg, f"REG_0x{reg:02x}")
+
+    def _decode_write(self, reg, payload):
+        reg_name = self._format_reg(reg)
+        if reg == 0x00:  # REG_COMMAND
+            if len(payload) >= 1:
+                cmd_name = self._CMD_NAMES.get(payload[0], f"0x{payload[0]:02x}")
+                return f"WRITE {reg_name} → {cmd_name}"
+            return f"WRITE {reg_name} (no data)"
+        if reg == 0x01:  # REG_MOVE_DIST (float)
+            if len(payload) >= 4:
+                (val,) = struct.unpack("<f", bytes(payload[:4]))
+                return f"WRITE {reg_name} → {val:.4f} mm"
+            return f"WRITE {reg_name} (short data: {payload!r})"
+        if reg == 0x08:  # REG_PARAM_SPEED (float)
+            if len(payload) >= 4:
+                (val,) = struct.unpack("<f", bytes(payload[:4]))
+                return f"WRITE {reg_name} → {val:.4f} mm/s"
+            return f"WRITE {reg_name} (short data: {payload!r})"
+        if reg in (0x0C, 0x10, 0x14):  # uint32 timeout registers
+            if len(payload) >= 4:
+                (val,) = struct.unpack("<I", bytes(payload[:4]))
+                return f"WRITE {reg_name} → {val} ms"
+            return f"WRITE {reg_name} (short data: {payload!r})"
+        if reg == 0x18:  # REG_PARAM_HOLD_TIMEOUT_ENABLED
+            if len(payload) >= 1:
+                enabled = "enabled" if payload[0] else "disabled"
+                return f"WRITE {reg_name} → {enabled} (0x{payload[0]:02x})"
+            return f"WRITE {reg_name} (no data)"
+        if reg == 0x19:  # REG_PARAM_MULTI_PRESS_COUNT
+            if len(payload) >= 1:
+                return f"WRITE {reg_name} → {payload[0]}"
+            return f"WRITE {reg_name} (no data)"
+        hex_payload = " ".join(f"{b:02x}" for b in payload)
+        return f"WRITE {reg_name} → {hex_payload}"
+
+    def _decode_read(self, reg, data):
+        reg_name = self._format_reg(reg)
+        if reg == 0x00:  # REG_COMMAND
+            if len(data) >= 1:
+                cmd_name = self._CMD_NAMES.get(data[0], f"0x{data[0]:02x}")
+                return f"READ {reg_name} → {cmd_name}"
+        elif reg == 0x01:  # REG_MOVE_DIST (float)
+            if len(data) >= 4:
+                (val,) = struct.unpack("<f", bytes(data[:4]))
+                return f"READ {reg_name} → {val:.4f} mm"
+        elif reg == 0x05:  # REG_STATUS
+            if len(data) >= 1:
+                flags = data[0]
+                filament = "present" if flags & 0x01 else "absent"
+                timed_out = " timed_out" if flags & 0x02 else ""
+                return (
+                    f"READ {reg_name} → filament={filament}{timed_out} (0x{flags:02x})"
+                )
+        elif reg == 0x06:  # REG_MODE
+            if len(data) >= 1:
+                mode_name = self._MODE_NAMES.get(data[0], f"0x{data[0]:02x}")
+                return f"READ {reg_name} → {mode_name}"
+        elif reg == 0x07:  # REG_MOTOR
+            if len(data) >= 1:
+                motor_name = self._MOTOR_NAMES.get(data[0], f"0x{data[0]:02x}")
+                return f"READ {reg_name} → {motor_name}"
+        elif reg == 0x08:  # REG_PARAM_SPEED (float)
+            if len(data) >= 4:
+                (val,) = struct.unpack("<f", bytes(data[:4]))
+                return f"READ {reg_name} → {val:.4f} mm/s"
+        elif reg in (0x0C, 0x10, 0x14):  # uint32 timeout registers
+            if len(data) >= 4:
+                (val,) = struct.unpack("<I", bytes(data[:4]))
+                return f"READ {reg_name} → {val} ms"
+        elif reg == 0x18:  # REG_PARAM_HOLD_TIMEOUT_ENABLED
+            if len(data) >= 1:
+                enabled = "enabled" if data[0] else "disabled"
+                return f"READ {reg_name} → {enabled} (0x{data[0]:02x})"
+        elif reg == 0x19:  # REG_PARAM_MULTI_PRESS_COUNT
+            if len(data) >= 1:
+                return f"READ {reg_name} → {data[0]}"
+        hex_data = " ".join(f"{b:02x}" for b in data)
+        return f"READ {reg_name} → {hex_data}"
+
+
 def create_pty(ptyname):
     """Creates a pseudo-TTY and symlinks it to ptyname."""
     mfd, sfd = pty.openpty()
@@ -159,37 +440,6 @@ def create_pty(ptyname):
     tcattr[6][termios.VTIME] = 0
     termios.tcsetattr(mfd, termios.TCSAFLUSH, tcattr)
     return mfd
-
-
-class I2CMonitor(pysimulavr.Pin):
-    """Attaches to an I2C Net and logs state transitions to stderr."""
-
-    MAX_EVENTS = 500
-
-    def __init__(self, name):
-        pysimulavr.Pin.__init__(self)
-        self.name = name
-        self.sc = pysimulavr.SystemClock.Instance()
-        self.last_state = None
-        self.count = 0
-
-    def SetInState(self, pin):
-        pysimulavr.Pin.SetInState(self, pin)
-        state = pin.outState
-        if state == self.last_state:
-            return
-        self.last_state = state
-        self.count += 1
-        if self.count > self.MAX_EVENTS:
-            return
-        if self.count == self.MAX_EVENTS:
-            sys.stderr.write("[I2C] (suppressing further events)\n")
-            sys.stderr.flush()
-            return
-        level = "H" if state == self.HIGH else "L" if state == self.LOW else "?"
-        t = self.sc.GetCurrentTime()
-        sys.stderr.write(f"[I2C] {self.name}={level}  t={t}ns\n")
-        sys.stderr.flush()
 
 
 # Internal trace: captures simulavr's internal device register/port state via DumpManager.
@@ -431,14 +681,6 @@ def main():
         default=0.0,
         help="stop after this many real-time seconds (0 = run forever)",
     )
-    opts.add_option(
-        "-i",
-        "--debug-i2c",
-        action="store_true",
-        dest="debug_i2c",
-        default=False,
-        help="log I2C SCL/SDA transitions to stderr",
-    )
     deffile = os.path.splitext(os.path.basename(sys.argv[0]))[0] + ".vcd"
     opts.add_option(
         "-t",
@@ -520,13 +762,10 @@ def main():
     i2c_int_net.add_device_pin("klipper", klipper_dev, "C4")
     i2c_int_net.add_device_pin("buffer", buffer_dev, "D0")
 
-    if options.debug_i2c:
-        scl_mon = I2CMonitor("SCL")
-        sda_mon = I2CMonitor("SDA")
-        int_mon = I2CMonitor("INT")
-        i2c_scl_net.Add(scl_mon)
-        i2c_sda_net.Add(sda_mon)
-        i2c_int_net.Add(int_mon)
+    # I2C protocol decoder: always active, prints decoded transactions to stderr
+    lll_decoder = LLLProtocolDecoder()
+    i2c_scl_net.Add(lll_decoder.i2c_decoder.scl_mon)
+    i2c_sda_net.Add(lll_decoder.i2c_decoder.sda_mon)
 
     # Klipper UART: bidirectional via PTY (TX=D1 out, RX=D0 in)
     fd = create_pty(ptyname)
